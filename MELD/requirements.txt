@@ -1,0 +1,6 @@
+PyYAML~=6.0.3
+isodate~=0.7.2
+pandas~=2.3.3
+psycopg2-binary==2.9.11
+SQLAlchemy~=2.0.43
+python-dotenv~=1.1.1

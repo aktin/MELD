@@ -1,0 +1,53 @@
+model:
+  name: "stationary-admission-test"
+  version: "1.0.0"
+  artifact:
+    path: "model"
+    checksum: "sha256:94b1c6dd750af4ccb3a3e..."
+  runtime:
+    framework: "tensorflow-tfdf"
+    container_image: "registry.local/stationary-admission:1.0.0"
+
+weights:
+  format: "tensorflow"
+  path: "weights"
+  checksum: "sha256:..."
+  version: "1.0.0"
+
+input_schema:
+  temporal_scope:
+    type: "relative"   # relative | absolute
+    value: "-P10Y"       # ISO 8601 duration
+    anchor: "2026-02-20T13:56:55.525240" # the anchor date for relative temporal scope
+
+  features:
+    - name: "cedis_code"
+      datatype: "string"
+      required: true
+    - name: "age"
+      datatype: "string"
+      required: true
+    - name: "admission_time"
+      datatype: "datetime"
+      required: true
+    - name: "triage_score"
+      datatype: "string"
+      required: true
+    - name: "should_have_been_admitted"
+      datatype: "string"
+      required: true
+
+#  hyperparameters:
+#    - name: "learning_rate"
+#      datatype: "float"
+#      required: true
+
+  query:
+    type: "sql"
+    path: "long-query-training.sql"
+
+output_schema:
+  format: "csv"
+  predictor:
+    - name: "should_have_been_admitted"
+      datatype: "integer"
