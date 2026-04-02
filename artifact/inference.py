@@ -5,8 +5,16 @@ from contextlib import redirect_stdout
 import keras
 import pandas as pd
 import tensorflow as tf
+from meld_logger import setup_logger
+from meld_utils import load_yaml
 from pandas import DataFrame
-from utils import load_yaml
+
+tf_logger = setup_logger("tensorflow")
+tf.get_logger().handlers = tf_logger.handlers
+tf.get_logger().setLevel(tf_logger.level)
+tf.get_logger().propagate = False
+
+logger = setup_logger("artifact")
 
 
 def _cast_series_for_model(series: pd.Series, spec: dict) -> tf.Tensor:
@@ -58,17 +66,20 @@ def _extract_prediction_series(raw_predictions, expected_len: int) -> pd.Series:
 
 def _load_decision_tree(path: str) -> keras.layers.TFSMLayer:
     import tensorflow_decision_forests
+    logger.info(f"Loading decision tree")
     model = tf.saved_model.load(path)
+    logger.info(f"Model loaded")
     return model.signatures["serving_default"]
 
 
 def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
-    print(df.to_csv(index=False), file=sys.stderr)
+    logger.info(f"Inference with {len(df)} rows.")
     inputs = _to_tensor_inputs(df, config)
 
     model_contract_path = config["model"]["artifact"]["path"]
     model_layer = _load_decision_tree(model_contract_path)
 
+    logger.info(f"Run inference")
     raw_predictions = model_layer(**inputs)
     prediction_series = _extract_prediction_series(raw_predictions, len(df))
 

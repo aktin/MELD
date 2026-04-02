@@ -1,5 +1,5 @@
 import io
-import os.path
+import os
 import subprocess
 
 import pandas as pd
@@ -12,11 +12,11 @@ def run_inference(input_data: pd.DataFrame, artifact_path: str = "artifact"):
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             stdin=subprocess.PIPE,
-        text=True,)
+                            text=True,
+                            env={"TF_CPP_MIN_LOG_LEVEL": "3",
+                                 "TF_ENABLE_ONEDNN_OPTS": "0"})
     input_str = input_data.to_csv(index=False)
     stdout, stderr = proc.communicate(input=input_str)
-
-    print(stderr)
 
     if proc.returncode != 0:
         raise RuntimeError(f"Inference failed:\n{stderr}")

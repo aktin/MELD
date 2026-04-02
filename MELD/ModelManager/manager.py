@@ -3,21 +3,50 @@ from datetime import datetime, timedelta
 
 import isodate
 import pandas as pd
+from meld_logger import setup_logger
 
 import ModelEnvironment
 from InternalDataLoader import execute_query
 from ModelManager import load_contract
-from utils import resolve_path
+from meld_utils import resolve_path
+
+logger = setup_logger("meld")
 
 
 def load_query(path: str) -> str:
+    """
+    Loads a SQL query string from the specified file path.
+
+    :param path: The file path to the query file to be loaded.
+    :type path: str
+    :return: The SQL query string loaded from the file.
+    :rtype: str
+    """
+    logger.info(f"Loading query from {path}")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"The file {path} does not exist.")
+    if not path.endswith(".sql"):
+        raise ValueError(f"The file {path} is not a SQL file. ")
+
     with open(path, "r") as file:
         query = file.read()
         return query
 
 
 def get_data(query: str, params: dict) -> pd.DataFrame:
-    return execute_query(query, params)
+    """
+    Executes a given SQL query with parameters and returns the result as a pandas DataFrame.
+
+    :param query: SQL query string to be executed.
+    :param params: Dictionary of parameters to be used in the SQL query.
+    :return: A pandas DataFrame containing the results of the executed query.
+    :rtype: pd.DataFrame
+    """
+    logger.info(f"Executing query")
+    data = execute_query(query, params)
+    logger.info(f"Query returned {len(data)} rows")
+    return data
 
 
 def run_inference(contract_path: str = "contract.yaml", output_csv_path: str = "predictions.csv") -> str:
@@ -25,6 +54,7 @@ def run_inference(contract_path: str = "contract.yaml", output_csv_path: str = "
     config = load_contract(contract_path)
 
     start, end = _compute_time_window(config)
+    logger.info(f"Temporal window start: {start.isoformat()}, end: {end.isoformat()}")
     params = {"start": start.isoformat(), "end": end.isoformat()}
 
     query_contract_path = os.path.join(artifact_path, config["input_schema"]["query"]["path"])
@@ -45,6 +75,19 @@ def run_inference(contract_path: str = "contract.yaml", output_csv_path: str = "
     return output_path
 
 def run_training(artifact_path: str = "artifact") -> str:
+    """
+    !!! Reine Testfunktion !!!
+
+    Runs the training pipeline, loading configuration and processing data
+    before invoking the model training.
+
+    :param artifact_path: Path to the directory containing the contract
+        and related configuration files. Defaults to "artifact".
+    :type artifact_path: str
+    :return: Path to the directory containing the artifacts of the training
+        process.
+    :rtype: str
+    """
     artifact_path = os.path.dirname(artifact_path)
     config = load_contract(os.path.join(artifact_path, "contract-training.yaml"))
 
@@ -74,7 +117,7 @@ def _compute_time_window(config: dict) -> tuple[datetime, datetime]:
     return start, end
 
 
-def _validate_features(df: pd.DataFrame, config: dict) -> list[str]:
+def _validate_features(df: pd.DataFrame, config: dict) -> list[dict]:
     features = config["input_schema"]["features"]
     required = [f["name"] for f in features]
     missing = [c for c in required if c not in df.columns]
