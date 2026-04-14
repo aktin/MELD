@@ -1,4 +1,15 @@
 import os
+import tarfile
+
+# if tarfile.is_tarfile("/input/input.tar"):
+#     print("[inference-test] Input file is a tar file")
+#     print("[inference-test] Unpacking input file...")
+#     with tarfile.open("/input/input.tar") as tar:
+#         tar.extractall("/input")
+
+for root, dirs, files in os.walk("/input"):
+    for name in files:
+        print(os.path.join(root, name))
 
 try:
     print("[inference-test] Reading input file...")
@@ -11,6 +22,7 @@ try:
             print("[inference-test] Did not work: fail")
 except Exception as e:
     print("[inference-test] Did not work: fail")
+    print(e)
 
 try:
     print("[inference-test] Writing input file...")
@@ -36,3 +48,8 @@ try:
         output_data = f.read()
 except Exception as e:
     print("[inference-test] Did not work: fail")
+
+print("[inference-test] Packing output file...")
+with tarfile.open("/output/output.tar", "w") as tar:
+    tar.add("/output/output.txt", arcname="output.txt")
+

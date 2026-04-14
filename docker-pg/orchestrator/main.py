@@ -1,6 +1,8 @@
+import io
 import os
 import shutil
 import subprocess
+import tarfile
 
 import docker
 from docker.models.containers import Container
@@ -79,13 +81,13 @@ def test_volumes():
     cleanup_volumes(input_volume, output_volume)
 
 
-def create_input_mountpoint():
+def create_input_mount_folder():
     print("[orchestrator-test] Creating input mountpoint...")
     if not os.path.exists("/shared/input"):
         os.makedirs("/shared/input")
 
 
-def create_output_mountpoint():
+def create_output_mount_folder():
     print("[orchestrator-test] Creating output mountpoint...")
     if not os.path.exists("/shared/output"):
         os.makedirs("/shared/output")
@@ -113,8 +115,8 @@ def cleanup_mounts():
 
 def test_mounts():
     print("[orchestrator-test] ************************************************\nTesting bind mounts...")
-    create_input_mountpoint()
-    create_output_mountpoint()
+    create_input_mount_folder()
+    create_output_mount_folder()
     write_input_file_in_mount()
     run_inference(volumes={
         "/home/shuening/code/KlimaNot/docker-pg/orchestrator/shared/input": {"bind": "/input", "mode": "ro"},
@@ -166,8 +168,8 @@ def copy_output_file(container: Container):
 
 def test_docker_copy():
     print("[orchestrator-test] ************************************************\nTesting docker copy...")
-    create_input_mountpoint()
-    create_output_mountpoint()
+    create_input_mount_folder()
+    create_output_mount_folder()
     write_input_file_in_mount()
     set_folder_to_read_only("/shared/input")
     container = create_inference_container()
@@ -177,7 +179,39 @@ def test_docker_copy():
     cleanup_mounts()
 
 
+def copy_input_data(container: Container):
+    buf = io.BytesIO()
+
+    print("[orchestrator-test] Archiving input data...")
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        tar.add("/shared/input", arcname="")
+
+    buf.seek(0)
+
+    print("[orchestrator-test] Copying input data to inference container...")
+    container.put_archive("/input", buf.getvalue())
+
+
+def unpacking_output_data(container):
+    print("[orchestrator-test] Copying output data from inference container...")
+    bits, _ = container.get_archive("/output/output.tar")
+
+    print("[orchestrator-test] Unpacking output data...")
+    with open("/shared/output/output.tar", "wb") as f:
+        for chunk in bits:
+            f.write(chunk)
+
+def test_docker_copy_and_unpack():
+    print("[orchestrator-test] ************************************************\nStarting docker api test...")
+    create_input_mount_folder()
+    create_output_mount_folder()
+    write_input_file_in_mount()
+    container = create_inference_container()
+    copy_input_data(container)
+    start_inference(container)
+    unpacking_output_data(container)
+    container.remove()
+    cleanup_mounts()
+
 if __name__ == '__main__':
-    test_volumes()
-    test_mounts()
-    test_docker_copy()
+    test_docker_copy_and_unpack()
