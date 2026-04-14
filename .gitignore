@@ -208,3 +208,4 @@ __marimo__/
 
 .idea/
 artifact*/model
+*.csv
