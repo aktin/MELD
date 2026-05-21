@@ -3,6 +3,9 @@ from datetime import datetime, timedelta
 
 import isodate
 import pandas as pd
+from ModelEnvironment import JobContext
+
+from ModelEnvironment.job_context import create_job_context, JobStatus
 from meld_logger import setup_logger
 
 import ModelEnvironment
@@ -13,7 +16,7 @@ from meld_utils import resolve_path
 logger = setup_logger("meld")
 
 
-def load_query(path: str) -> str:
+def load_query(job_context: JobContext) -> str:
     """
     Loads a SQL query string from the specified file path.
 
@@ -22,19 +25,19 @@ def load_query(path: str) -> str:
     :return: The SQL query string loaded from the file.
     :rtype: str
     """
-    logger.info(f"Loading query from {path}")
+    job_context.logger.info(f"Loading query from {job_context.query_path}")
 
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"The file {path} does not exist.")
-    if not path.endswith(".sql"):
-        raise ValueError(f"The file {path} is not a SQL file. ")
+    if not os.path.exists(job_context.query_path):
+        raise FileNotFoundError(f"The file {job_context.query_path} does not exist.")
+    if not job_context.query_path.endswith(".sql"):
+        raise ValueError(f"The file {job_context.query_path} is not a SQL file. ")
 
-    with open(path, "r") as file:
+    with open(job_context.query_path, "r") as file:
         query = file.read()
         return query
 
 
-def get_data(query: str, params: dict) -> pd.DataFrame:
+def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFrame:
     """
     Executes a given SQL query with parameters and returns the result as a pandas DataFrame.
 
@@ -43,82 +46,77 @@ def get_data(query: str, params: dict) -> pd.DataFrame:
     :return: A pandas DataFrame containing the results of the executed query.
     :rtype: pd.DataFrame
     """
-    logger.info(f"Executing query")
+    job_context.logger.info(f"Executing query")
+    start = datetime.now()
     data = execute_query(query, params)
-    logger.info(f"Query returned {len(data)} rows")
+    end = datetime.now()
+    job_context.logger.info(f"Query returned {len(data)} rows and took {end - start} seconds.")
     return data
 
 
-def run_inference(contract_path: str = "contract.yaml", output_csv_path: str = "predictions.csv") -> str:
-    artifact_path = os.path.dirname(contract_path)
-    config = load_contract(contract_path)
+def run_inference(contract_path: str = "contract.yaml") -> None:
+    job_context = create_job_context(contract_path)
+    try:
+        job_context.log_event("Preparing inference", JobStatus.PREPARING)
+        start, end = _compute_time_window(job_context)
+        params = {"start": start.isoformat(), "end": end.isoformat()}
 
-    start, end = _compute_time_window(config)
-    logger.info(f"Temporal window start: {start.isoformat()}, end: {end.isoformat()}")
-    params = {"start": start.isoformat(), "end": end.isoformat()}
+        query = load_query(job_context)
 
-    query_contract_path = os.path.join(artifact_path, config["input_schema"]["query"]["path"])
-    query_path = resolve_path(query_contract_path)
-    query = load_query(query_path)
+        df = query_data(query, params, job_context)
 
-    df = get_data(query, params)
+        feature_cols = _validate_features(df, job_context)
+        x = _normalize_features(df, feature_cols)
 
-    feature_cols = _validate_features(df, config)
-    x = _normalize_features(df, feature_cols)
+        ModelEnvironment.run_inference(x, job_context)
+    except Exception as e:
+        logger.exception(f"An exception occurred during inference: {e}")
 
-    result_df = ModelEnvironment.run_inference(x, artifact_path=artifact_path)
 
-    output_path = resolve_path(output_csv_path) if not os.path.isabs(output_csv_path) else output_csv_path
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    result_df.to_csv(output_path, index=False)
-
-    return output_path
-
-def run_training(artifact_path: str = "artifact") -> str:
+def run_training(contract_path: str, query_path: str, artifact_path: str) -> str:
     """
     !!! Reine Testfunktion !!!
 
     Runs the training pipeline, loading configuration and processing data
     before invoking the model training.
 
-    :param artifact_path: Path to the directory containing the contract
-        and related configuration files. Defaults to "artifact".
-    :type artifact_path: str
+    :param contract_path: Path to the directory containing the contract
+        and related configuration files. Defaults to "artifact_df".
+    :type contract_path: str
     :return: Path to the directory containing the artifacts of the training
         process.
     :rtype: str
     """
-    artifact_path = os.path.dirname(artifact_path)
-    config = load_contract(os.path.join(artifact_path, "contract-training.yaml"))
+    config = load_contract(contract_path)
 
-    start, end = _compute_time_window(config)
+    start, end = _compute_time_window(job_context)
     params = {"start": start.isoformat(), "end": end.isoformat()}
 
-    query_contract_path = os.path.join(artifact_path, config["input_schema"]["query"]["path"])
-    query_path = resolve_path(query_contract_path)
     query = load_query(query_path)
 
-    df = get_data(query, params)
+    df = query_data(query, params)
 
-    feature_cols = _validate_features(df, config)
+    feature_cols = _validate_features(df, job_context)
     x = _normalize_features(df, feature_cols)
 
     ModelEnvironment.run_training(x, artifact_path=artifact_path)
 
 
-def _compute_time_window(config: dict) -> tuple[datetime, datetime]:
-    scope = config["input_schema"]["temporal_scope"]
+def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
+    scope = job_context.contract["input_schema"]["temporal_scope"]
     anchor = scope.get("anchor")
     duration = scope.get("value")
 
     end = datetime.fromisoformat(anchor) if anchor else datetime.now()
-    td: timedelta = isodate.parse_duration(duration).totimedelta(end=end)
+    td: timedelta = isodate.parse_duration(duration, as_timedelta_if_possible=False).totimedelta(end=end)
     start = end + td
+    job_context.logger.info(f"Temporal window start: {start.isoformat()}, end: {end.isoformat()}")
     return start, end
 
 
-def _validate_features(df: pd.DataFrame, config: dict) -> list[dict]:
-    features = config["input_schema"]["features"]
+def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
+    job_context.logger.info(f"Validating features")
+    features = job_context.contract["input_schema"]["features"]
     required = [f["name"] for f in features]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -145,6 +143,7 @@ def _normalize_features(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFra
 
     return x
 
+
 def _normalize_column(df: pd.DataFrame, column: str, datatype: str) -> pd.Series:
     dt = datatype.strip().lower()
 
@@ -164,3 +163,4 @@ def _normalize_column(df: pd.DataFrame, column: str, datatype: str) -> pd.Series
         return df[column].astype("string")
     else:
         return df[column].astype("object")
+

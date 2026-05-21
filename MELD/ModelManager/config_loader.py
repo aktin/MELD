@@ -4,7 +4,7 @@ from meld_utils import load_yaml
 logger = setup_logger("meld")
 
 
-def load_contract(path: str):
+def load_contract(path: str) -> dict:
     """
     Loads a contract from the specified YAML file path.
 
