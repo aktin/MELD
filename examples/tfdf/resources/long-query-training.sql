@@ -3,15 +3,16 @@
 CREATE TEMPORARY TABLE temp_joindata AS
 
 --SELECT BASIC INFORMATION
-SELECT DISTINCT obs.encounter_num,
-                obs.patient_num,
-                EXTRACT(years FROM age(vis_dim.start_date, pat_dim.birth_date)) AS age_in_years,
-                pat_dim.sex_cd                                                  as gender,
-                vis_dim.start_date                                              AS admission_date,
-                vis_dim.end_date                                                AS discharge_date
+SELECT DISTINCT
+obs.encounter_num,
+obs.patient_num,
+EXTRACT(years FROM age(vis_dim.start_date, pat_dim.birth_date)) AS age_in_years,
+pat_dim.sex_cd as gender,
+vis_dim.start_date AS admission_date,
+vis_dim.end_date AS discharge_date
 FROM i2b2crcdata.observation_fact obs
-         JOIN i2b2crcdata.patient_dimension pat_dim ON (obs.patient_num = pat_dim.patient_num)
-         JOIN i2b2crcdata.visit_dimension vis_dim ON (obs.encounter_num = vis_dim.encounter_num)
+JOIN i2b2crcdata.patient_dimension pat_dim ON (obs.patient_num = pat_dim.patient_num)
+JOIN i2b2crcdata.visit_dimension vis_dim ON (obs.encounter_num = vis_dim.encounter_num)
 
 -- Column Zeitfilter
 WHERE vis_dim.start_date BETWEEN :start AND :end;
@@ -1367,6 +1368,8 @@ delete from temp_ops WHERE ops_code is NULL;
 SELECT temp_encounter_data.altersgruppe as age,
        temp_encounter_data.triage as triage_score,
        aufnahme_ts as admission_time,
-       temp_encounter_data.cedis as cedis_code
+       temp_encounter_data.cedis as cedis_code,
+       temp_encounter_data.verbleib,
+       (case when temp_encounter_data.verbleib like 'Aufnahme%' then 1 else 0 end) as admitted
        FROM  temp_encounter_data
---         LIMIT 1;
+WHERE temp_encounter_data.verbleib is not null;

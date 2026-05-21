@@ -1,20 +1,13 @@
-import io
-import sys
-from contextlib import redirect_stdout
-
+import os
 import keras
 import pandas as pd
 import tensorflow as tf
-from meld_logger import setup_logger
-from meld_utils import load_yaml
 from pandas import DataFrame
 
-tf_logger = setup_logger("tensorflow")
-tf.get_logger().handlers = tf_logger.handlers
-tf.get_logger().setLevel(tf_logger.level)
-tf.get_logger().propagate = False
+from meld_logger import setup_logger
+from meld_utils import load_yaml
 
-logger = setup_logger("artifact")
+logger = setup_logger("inference")
 
 
 def _cast_series_for_model(series: pd.Series, spec: dict) -> tf.Tensor:
@@ -76,8 +69,8 @@ def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
     logger.info(f"Inference with {len(df)} rows.")
     inputs = _to_tensor_inputs(df, config)
 
-    model_contract_path = config["model"]["artifact"]["path"]
-    model_layer = _load_decision_tree(model_contract_path)
+    model_path = "/artifact/"
+    model_layer = _load_decision_tree(model_path)
 
     logger.info(f"Run inference")
     raw_predictions = model_layer(**inputs)
@@ -88,13 +81,14 @@ def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
 
     result_df[predictor_name] = prediction_series
 
+    logger.info(f"Inference done")
+
     return result_df
 
 
 if __name__ == "__main__":
-    raw_input = sys.stdin.read()
-    data = pd.read_csv(io.StringIO(raw_input))
-    config = load_yaml("contract.yaml")
-    with redirect_stdout(sys.stderr):
-        result = run_inference(data, config)
-    result.to_csv(sys.stdout, index=False)
+    config = load_yaml("/input/contract.yaml")
+    with open("/input/input.csv", "r") as f:
+        result = run_inference(pd.read_csv(f), config)
+
+    result.to_csv("/output/output.csv", index=False)

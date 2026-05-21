@@ -1369,5 +1369,7 @@ SELECT temp_encounter_data.altersgruppe as age,
        temp_encounter_data.triage as triage_score,
        aufnahme_ts as admission_time,
        temp_encounter_data.cedis as cedis_code,
-       (case when temp_encounter_data.verbleib = 'Tod' then 1 else 0 end) as should_have_been_admitted
-       FROM  temp_encounter_data;
+       temp_encounter_data.verbleib,
+       (case when temp_encounter_data.verbleib like 'Aufnahme%' then 1 else 0 end) as admitted
+       FROM  temp_encounter_data
+WHERE temp_encounter_data.verbleib is not null;
