@@ -1,9 +1,11 @@
 import logging
+import os
 
-def setup_logger(name: str, config: dict = None, level: int = logging.INFO) -> logging.Logger:
+def setup_logger(name: str, level: int = logging.INFO, logs_path: str = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.propagate = False
+    logs_path = logs_path or "/logs"
 
     if not logger.handlers:
         formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -11,10 +13,16 @@ def setup_logger(name: str, config: dict = None, level: int = logging.INFO) -> l
         stdout_handler = logging.StreamHandler()
         stdout_handler.setFormatter(formatter)
         stdout_handler.setLevel(level)
-
-        # TODO add file handler
-
         logger.addHandler(stdout_handler)
+
+        all_file_handler = logging.FileHandler(os.path.join(logs_path, f"{name}.log"))
+        all_file_handler.setFormatter(formatter)
+        all_file_handler.setLevel(level)
+        logger.addHandler(all_file_handler)
+
+        stderr_file_handler = logging.FileHandler(os.path.join(logs_path, f"{name}.err.log"))
+        stderr_file_handler.setLevel(logging.ERROR)
+        logger.addHandler(stderr_file_handler)
 
         logger.info(f"Logger {name} initialized")
 

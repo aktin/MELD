@@ -4,10 +4,12 @@ import pandas as pd
 # TODO: ergibt sqlalchemy sinn?
 from sqlalchemy import text
 
+from meld_logger import setup_logger
 from .db import engine
 
-def execute_query(sql: str, params: dict = None) -> pd.DataFrame:
+logger = setup_logger("meld")
 
+def execute_query(sql: str, params: dict = None) -> pd.DataFrame:
     with (engine.connect() as connection):
         df = pd.read_sql_query(text(sql), connection, params=params)
 
