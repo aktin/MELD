@@ -3,7 +3,7 @@ import pandas as pd
 import tensorflow as tf
 import tensorflow_decision_forests as tfdf
 
-from utils import load_yaml
+from meld_utils import load_yaml
 
 
 def _split_dataset(dataset, test_ratio=0.30):
@@ -24,7 +24,7 @@ def _train(dataset: pd.DataFrame, predictors: list[str], features: list[str] = N
 
     tfdf_model = tfdf.keras.GradientBoostedTreesModel()
     tfdf_model.fit(tf_train_ds)
-    # tfdf_model.evaluate(tf_test_ds)
+    tfdf_model.evaluate(tf_test_ds)
 
     return tfdf_model
 
@@ -41,9 +41,9 @@ def run_training(dataset: pd.DataFrame, config: dict):
     predictor = [f["name"] for f in config["output_schema"]["predictor"]]
     m = _train(dataset, features=[f["name"] for f in config["input_schema"]["features"]],
                predictors=predictor)
-    _build_artifact(m, config["model"]["artifact"]["path"])
+    _build_artifact(m, "../artifact")
 
 if __name__ == "__main__":
-    data = pd.read_csv("input.csv")
-    config = load_yaml("contract-training.yaml")
-    result = run_training(data, config)
+    data = pd.read_csv("./input.csv")
+    config = load_yaml("../resources/contract-training.yaml")
+    run_training(data, config)
