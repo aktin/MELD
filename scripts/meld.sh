@@ -44,22 +44,21 @@ check_installation() {
   fi
 }
 
+download_file_if_not_exist() {
+  file_name=$1
+  if [ ! -f "./$file_name" ]; then
+    curl -o "./$file_name" "https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/scripts/$file_name"
+  fi
+}
+
 download_files() {
-  if [ ! -f ./run.sh ]; then
-    curl -O https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/scripts/run.sh
-  fi
+  download_file_if_not_exist run.sh
 
-  if [ ! -f ./compose.yml ]; then
-    curl -O https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/scripts/compose.yml
-  fi
+  download_file_if_not_exist compose.yml
 
-  if [ ! -f ./utils.sh ]; then
-    curl -O https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/scripts/utils.sh
-  fi
+  download_file_if_not_exist utils.sh
 
-  if [ ! -f ./install.sh ]; then
-    curl -O https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/scripts/install.sh
-  fi
+  download_file_if_not_exist install.sh
 }
 
 print_logo
