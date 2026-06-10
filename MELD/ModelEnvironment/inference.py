@@ -11,8 +11,23 @@ from ModelEnvironment.docker_runtime import ensure_image_exists, create_containe
     stop_container, destroy_container
 from ModelEnvironment.job_context import JobContext, JobStatus
 
-def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_context: JobContext):
-    # copy input data (db entries, contract) into runtime container
+def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_context: JobContext) -> None:
+    """
+    Copies input data and related contract information into a specified runtime container.
+
+    This function handles the transfer of input data and a contract from the runtime job
+    context to a container through archiving and file system operations.
+
+    Parameters:
+        container (Container): The runtime container instance where data will be copied.
+        input_data (pd.DataFrame): The input data to be converted into a CSV format and copied.
+        job_context (JobContext): The context of the current job, including paths,
+                                   logging mechanisms, and contract details.
+
+    Raises:
+        RuntimeError: Raised when the process of copying input data into the container
+                      fails due to API errors or other unforeseen exceptions.
+    """
     try:
         job_context.logger.info("Copying input data into runtime container")
         input_data.to_csv(os.path.join(job_context.input_data_path, "input.csv"), index=False)
@@ -35,7 +50,22 @@ def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_c
         raise RuntimeError(error) from e
 
 
-def pack_result_files(output_tar_path: str, archive_bytes: io.BytesIO, job_context: JobContext):
+def pack_result_files(output_tar_path: str, archive_bytes: io.BytesIO, job_context: JobContext) -> None:
+    """
+    Packs result files from an input archive into a gzipped tar file.
+
+    Parameters:
+        output_tar_path: str
+            The path where the gzipped tar archive will be created.
+        archive_bytes: io.BytesIO
+            A byte stream containing the input tar archive.
+        job_context: JobContext
+            The job context object, typically used for logging.
+
+    Raises:
+        KeyError: If an invalid tar member is accessed.
+        tarfile.TarError: If there's an error processing the tar files.
+    """
     job_context.logger.info(f"Packing result files")
     with tarfile.open(output_tar_path, mode="w:gz") as out_tar:
         with tarfile.open(fileobj=archive_bytes, mode="r:*") as in_tar:
@@ -50,7 +80,18 @@ def pack_result_files(output_tar_path: str, archive_bytes: io.BytesIO, job_conte
                     out_tar.addfile(member, fileobj=None)
 
 
-def pack_metadata_and_logs(output_tar_path: str, job_context: JobContext):
+def pack_metadata_and_logs(output_tar_path: str, job_context: JobContext) -> None:
+    """
+    Packs metadata, logs, and input data into a compressed tarball.
+
+    Parameters:
+        output_tar_path (str): The file path where the tarball will be created.
+        job_context (JobContext): The context object containing job-related paths
+            and logging information.
+
+    Raises:
+        TarError: If an error occurs during the tarball creation process.
+    """
     job_context.logger.info(f"Packing metadata and logs")
     with tarfile.open(output_tar_path, mode="w:gz") as out_tar:
         out_tar.add(job_context.query_path, arcname="output/query.sql")
@@ -60,6 +101,17 @@ def pack_metadata_and_logs(output_tar_path: str, job_context: JobContext):
 
 
 def get_output_data_from_container(container: Container, job_context: JobContext) -> io.BytesIO:
+    """
+    Retrieves the output data from a specified container and returns it as a file-like object.
+
+    Parameters:
+    container (Container): The container instance from which the output data is retrieved.
+    job_context (JobContext): The execution context used during the job, which includes logging
+        and operational information.
+
+    Returns:
+    io.BytesIO: A file-like object containing the retrieved archive content in memory.
+    """
     job_context.logger.info("Copying result from runtime container")
     # Convert Docker's byte-stream generator into a real file-like object.
     archive_stream, _ = container.get_archive("/output/")
@@ -68,7 +120,18 @@ def get_output_data_from_container(container: Container, job_context: JobContext
     return archive_bytes
 
 
-def run_inference(input_data: pd.DataFrame, job_context: JobContext):
+def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
+    """
+    Runs inference on the provided input data using the configured runtime environment.
+
+    Parameters:
+    input_data (pd.DataFrame): The data to be processed during the inference.
+    job_context (JobContext): The context object containing configuration, logging,
+    job metadata, and other task-specific settings.
+
+    Raises:
+    Exception: If an error occurs during any part of the inference process.
+    """
     job_context.log_event("Running inference", JobStatus.RUNNING)
     image = f"{job_context.contract['inference']['image_tag']}:{job_context.contract['inference']['version']}"
     output_tar_path = os.path.join(job_context.output_data_path, "output.tar.gz")

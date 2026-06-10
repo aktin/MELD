@@ -1,0 +1,19 @@
+services:
+  meld:
+    image: ghcr.io/simhue/meld:latest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5433
+      - DB_USER=i2b2crcdata
+      - DB_PASSWORD=demouser
+      - DB_SCHEMA=i2b2
+      - MELD_CMD=${MELD_CMD}
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./logs:/logs"
+      - "./jobs/:/jobs/"
+      - "${MELD_OUTPUT_DIR:-./output}:/output"
+      - "${MELD_CONTRACT_PATH:-./}:/resources/contract.yaml"
+      - "~/.docker:/root/.docker:ro" # for ghcr authentication when logged in on host

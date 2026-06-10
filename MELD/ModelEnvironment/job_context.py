@@ -27,6 +27,28 @@ class JobStatus(Enum):
 
 
 class JobContext:
+    """
+    Represents a job context within the application.
+
+    The JobContext class is responsible for managing the lifecycle and setup of a
+    job, including folder structure, logging, and status updates. It initializes
+    based on a contract, which defines runtime configurations, input/output schemas,
+    and other job-specific parameters.
+
+    Attributes:
+        status (JobStatus): The current status of the job.
+        container_status (str): The current status of the job container, if applicable.
+        contract_path (str): The file path to the job's contract.
+        contract (dict): The loaded job contract, including runtime and input schema configurations.
+        job_id (str): A unique identifier for the job, generated based on the current timestamp.
+        input_data_path (str): Path to the input data folder for the job.
+        output_data_path (str): Path to the output data folder for the job.
+        status_path (str): Path to the status folder for the job.
+        logs_path (str): Path to the logs folder for the job.
+        query_url (str): The input query URL specified in the job's contract.
+        logger (logging.Logger): The logger used for job-related logging.
+    """
+
     def __init__(self, contract_path: str):
         self.status = None
         self.container_status = None

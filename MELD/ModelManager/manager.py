@@ -56,6 +56,20 @@ def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFram
 
 
 def run_inference(contract_path: str = "contract.yaml") -> None:
+    """
+    Run the inference workflow using the given contract file.
+
+    Parameters:
+    contract_path: str
+        Path to the contract file, default is "contract.yaml".
+
+    Raises:
+    Exception
+        Logs the exception if an error occurs during the inference process.
+
+    Returns:
+    None
+    """
     job_context = create_job_context(contract_path)
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
@@ -104,6 +118,17 @@ def run_training(contract_path: str, query_path: str, artifact_path: str) -> str
 
 
 def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
+    """
+    Compute the temporal window based on the input schema's temporal scope.
+
+    Args:
+        job_context (JobContext): The context of the job containing the contract
+        metadata, which includes the temporal scope specifications.
+
+    Returns:
+        tuple[datetime, datetime]: A tuple containing the start and end datetime
+        objects representing the temporal window.
+    """
     scope = job_context.contract["input_schema"]["temporal_scope"]
     anchor = scope.get("anchor")
     duration = scope.get("value")
@@ -116,6 +141,23 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
 
 
 def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
+    """
+    Validates the presence of required feature columns in a given dataframe against the input schema.
+
+    Parameters:
+    df : pd.DataFrame
+        The dataframe to validate.
+    job_context : JobContext
+        The context that includes the contract and logger configuration.
+
+    Returns:
+    list[str]
+        A list of required feature column names.
+
+    Raises:
+    ValueError
+        If the required feature columns are missing from the dataframe.
+    """
     job_context.logger.info(f"Validating features")
     features = job_context.contract["input_schema"]["features"]
     required = [f["name"] for f in features]
@@ -129,6 +171,20 @@ def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
 
 
 def _normalize_features(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
+    """
+    Normalizes the specified feature columns in the provided DataFrame.
+
+    Parameters:
+    df : pd.DataFrame
+        Input DataFrame containing the data to be normalized.
+    feature_cols : list[str]
+        List of feature column names to be normalized within the DataFrame.
+
+    Returns:
+    pd.DataFrame
+        A new DataFrame where the specified feature columns are normalized
+        according to their data types.
+    """
     x = df[feature_cols].copy()
 
     for col in x.columns:

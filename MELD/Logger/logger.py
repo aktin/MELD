@@ -1,11 +1,27 @@
 import logging
 import os
 
-def setup_logger(name: str, level: int = logging.INFO, logs_path: str = None) -> logging.Logger:
+ def setup_logger(name: str, level: int = logging.INFO, logs_path: str = "/logs") -> logging.Logger:
+    """
+    Configures and initializes a logger with specific settings for logging to console and files.
+
+    Parameters:
+    name: str
+        The name of the logger instance to be created.
+    level: int, optional
+        The logging level (e.g., DEBUG, INFO, WARNING) for the logger. Defaults to logging.INFO.
+    logs_path: str, optional
+        The directory path where log files should be saved. If not provided, the default directory
+        "/logs" will be used.
+
+    Returns:
+    logging.Logger
+        A configured logger instance with the specified settings.
+    """
+
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.propagate = False
-    logs_path = logs_path or "/logs"
 
     # avoid duplicate
     if not logger.handlers:

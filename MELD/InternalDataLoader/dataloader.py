@@ -11,7 +11,19 @@ from .db import engine
 
 logger = setup_logger("meld")
 
-def execute_query(sql: str, params: dict = None) -> pd.DataFrame:
+
+def execute_query(sql: str, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:
+    """
+    Executes a SQL query and retrieves the result as a DataFrame or an iterator of DataFrames.
+
+    Parameters:
+        sql (str): The SQL query to execute.
+        params (dict | None): The parameters to use with the SQL query. Defaults to None.
+
+    Returns:
+        DataFrame | Iterator[DataFrame]: The result set of the query as a DataFrame
+        or an iterator of DataFrames (if applicable).
+    """
     with (engine.connect() as connection):
         df = pd.read_sql_query(text(sql), connection, params=params)
 
