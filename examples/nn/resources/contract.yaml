@@ -1,21 +1,19 @@
 inference:
   name: "stationary-admission-test"
-  version: "latest"
-  checksum: "sha256:..."
-  image_tag: "examples/nn"
+  version: "0.1.0"
+
 
 runtime:
   framework: "tensorflow"
-  # checksum: "sha256:..." # is this still necessary?
-  version: "1.0.0"
+  version: "0.1.0"
+  # checksum: "sha256:519abbabb0b3e8f379c73b2754749b984cfc72d618bb5cd6529b65e2efcaf02d"
+  image_tag: "ghcr.io/simhue/meld-examples-nn"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
 
 model:
   format: "tensorflow"
   version: "1.0.0"
-  # checksum: "sha256:..." # is this still necessary?
-#  version: "latest"
 
 input_schema:
   temporal_scope:
@@ -44,7 +42,7 @@ input_schema:
 
   query:
     type: "sql"
-    path: "long-query.sql"
+    url: "https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/examples/nn/resources/long-query.sql"
 
 output_schema:
   format: "csv"
