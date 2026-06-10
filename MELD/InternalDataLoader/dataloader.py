@@ -1,6 +1,5 @@
 from typing import Iterator
 
-import pandas as pd
 # TODO: ergibt sqlalchemy sinn?
 from sqlalchemy import text
 
