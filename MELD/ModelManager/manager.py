@@ -140,7 +140,45 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     return start, end
 
 
-def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
+def pull_runtime(contract_path):
+    """
+    Pulls a runtime image based on the specified contract file.
+
+    Parameters:
+    contract_path: str
+        The file path to the contract that specifies the runtime information.
+
+    Raises:
+    Exception
+        Raised if an error occurs during the image tag construction or image
+        pulling process.
+    """
+    try:
+        image = construct_image_tag(load_contract(contract_path))
+        pull_image(image)
+    except Exception as e:
+        logger.exception(f"An exception occurred during runtime pull: {e}")
+
+
+def remove_runtime(contract_path):
+    """
+    Removes the runtime associated with a given contract.
+
+    Args:
+        contract_path (str): The file path to the contract.
+
+    Raises:
+        Exception: If an error occurs during image construction or
+        deletion, it is caught and logged.
+    """
+    try:
+        image = construct_image_tag(load_contract(contract_path))
+        delete_image(image)
+    except Exception as e:
+        logger.exception(f"An exception occurred during runtime removal: {e}")
+
+
+def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[str]:
     """
     Validates the presence of required feature columns in a given dataframe against the input schema.
 
