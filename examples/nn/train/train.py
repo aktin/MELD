@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from meld_utils import load_yaml
+from utils import load_yaml
 
 
 def _split_dataset(dataset, test_ratio=0.30):

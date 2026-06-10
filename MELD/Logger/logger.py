@@ -7,6 +7,7 @@ def setup_logger(name: str, level: int = logging.INFO, logs_path: str = None) ->
     logger.propagate = False
     logs_path = logs_path or "/logs"
 
+    # avoid duplicate
     if not logger.handlers:
         formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 

@@ -6,7 +6,8 @@ from enum import Enum
 from docker.utils import kwargs_from_env
 
 from ModelManager import config_loader
-from meld_logger import setup_logger
+from Logger import setup_logger
+from utils import construct_image_tag
 
 
 class JobStatus(Enum):

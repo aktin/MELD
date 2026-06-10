@@ -4,17 +4,17 @@ WORKDIR /
 
 RUN mkdir -p /logs /jobs /app
 
-COPY ./utils /utils
-COPY ./Logger /Logger
-COPY MELD/*.py /app/
-COPY MELD/requirements.txt /app/requirements.txt
-COPY MELD/InternalDataLoader /app/InternalDataLoader
-COPY MELD/ModelEnvironment /app/ModelEnvironment
-COPY ./MELD/ModelManager /app/ModelManager
+COPY *.py /app/
+COPY requirements.txt /app/requirements.txt
+COPY InternalDataLoader /app/InternalDataLoader
+COPY ModelEnvironment /app/ModelEnvironment
+COPY ModelManager /app/ModelManager
+COPY utils /app/utils
+COPY Logger /app/Logger
 
 
 WORKDIR /app
 
 RUN pip install --no-cache-dir -r ./requirements.txt
 
-CMD ["python", "inference.py"]
+CMD ["python", "main.py"]

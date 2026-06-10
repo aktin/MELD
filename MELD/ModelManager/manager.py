@@ -11,7 +11,8 @@ from meld_logger import setup_logger
 import ModelEnvironment
 from InternalDataLoader import execute_query
 from ModelManager import load_contract
-from meld_utils import resolve_path
+from Logger import setup_logger
+from utils import construct_image_tag, safe_filename_from_url, download_file
 
 logger = setup_logger("meld")
 

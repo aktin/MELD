@@ -1,5 +1,5 @@
-from meld_logger import setup_logger
-from meld_utils import load_yaml
+from Logger import setup_logger
+from utils import load_yaml
 
 logger = setup_logger("meld")
 

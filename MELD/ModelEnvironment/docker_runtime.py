@@ -7,7 +7,7 @@ from docker.models.containers import Container
 
 import requests
 from ModelEnvironment.job_context import JobStatus, JobContext
-from meld_logger import setup_logger
+from Logger import setup_logger
 
 client = docker.from_env()
 
@@ -143,4 +143,3 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         error = f"Failed to create image {image}"
         job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
         raise RuntimeError(error) from e
-
