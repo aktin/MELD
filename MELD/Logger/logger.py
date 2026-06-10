@@ -1,7 +1,8 @@
 import logging
 import os
 
- def setup_logger(name: str, level: int = logging.INFO, logs_path: str = "/logs") -> logging.Logger:
+
+def setup_logger(name: str, level: int = logging.INFO, logs_path: str = "/logs") -> logging.Logger:
     """
     Configures and initializes a logger with specific settings for logging to console and files.
 
@@ -42,6 +43,5 @@ import os
         logger.addHandler(stderr_file_handler)
 
         logger.info(f"Logger {name} initialized")
-
 
     return logger
