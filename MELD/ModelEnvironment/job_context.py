@@ -3,14 +3,14 @@ import json
 import os.path
 from enum import Enum
 
-from docker.utils import kwargs_from_env
-
 from ModelManager import config_loader
 from Logger import setup_logger
 from utils import construct_image_tag
 
 
 class JobStatus(Enum):
+    DELETING_IMAGE = "DELETING_IMAGE"
+    IMAGE_DELETED = "IMAGE_DELETED"
     QUERY_FINISHED = "QUERY_FINISHED"
     START_QUERY = "START_QUERY"
     PENDING = "PENDING"
@@ -64,11 +64,15 @@ class JobContext:
         self.output_data_path = self._create_output_folder()
         self.status_path = self._create_status_folder()
         self.logs_path = self._create_log_folder()
-        self.query_path = self._get_query_path()
+        self.query_url = self.contract["input_schema"]["query"]["url"]
+        # self.query_path = self._get_query_path()
 
         self.logger = setup_logger(f"meld.job{self.job_id}", logs_path=self.logs_path, )
-        self.log_event("Job created", JobStatus.PENDING)
+        self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
 
+    @property
+    def image_tag(self):
+        return construct_image_tag(self.contract, )
 
     def _get_query_path(self):
         query_path = os.path.join("/resources", self.contract["input_schema"]["query"]["path"])
@@ -87,14 +91,14 @@ class JobContext:
         return input_path
 
     def _create_output_folder(self):
-        input_path = os.path.join(self._job_folder, "output")
+        output_path = os.path.join(self._job_folder, "output")
 
-        if not os.path.exists(input_path):
-            os.makedirs(input_path)
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
         else:
             raise Exception(f"Output folder for job {self.job_id} already exists")
 
-        return input_path
+        return output_path
 
     def _create_job_folder(self):
         job_folder = os.path.join("/jobs", self.job_id)

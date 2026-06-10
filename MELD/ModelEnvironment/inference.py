@@ -94,8 +94,8 @@ def pack_metadata_and_logs(output_tar_path: str, job_context: JobContext) -> Non
     """
     job_context.logger.info(f"Packing metadata and logs")
     with tarfile.open(output_tar_path, mode="w:gz") as out_tar:
-        out_tar.add(job_context.query_path, arcname="output/query.sql")
-        out_tar.add(job_context.contract_path, arcname="output/contract.yaml")
+        out_tar.add(job_context.input_data_path, arcname="output/")
+        #out_tar.add(job_context.contract_path, arcname="output/contract.yaml")
         out_tar.add(job_context.logs_path, arcname="output/logs")
         out_tar.add(job_context.status_path, arcname="output/status")
 
@@ -133,11 +133,11 @@ def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
     Exception: If an error occurs during any part of the inference process.
     """
     job_context.log_event("Running inference", JobStatus.RUNNING)
-    image = f"{job_context.contract['inference']['image_tag']}:{job_context.contract['inference']['version']}"
+    image = job_context.image_tag
     output_tar_path = os.path.join(job_context.output_data_path, "output.tar.gz")
     runtime_container = None
     try:
-        ensure_image_exists(image, job_context)
+        ensure_image_exists(job_context)
 
         runtime_container = create_container(image, job_context, )
 

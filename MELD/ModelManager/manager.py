@@ -2,14 +2,13 @@ import os
 from datetime import datetime, timedelta
 
 import isodate
-import pandas as pd
-from ModelEnvironment import JobContext
-
-from ModelEnvironment.job_context import create_job_context, JobStatus
-from meld_logger import setup_logger
 
 import ModelEnvironment
+import pandas as pd
 from InternalDataLoader import execute_query
+from ModelEnvironment import JobContext
+from ModelEnvironment.docker_runtime import pull_image, delete_image
+from ModelEnvironment.job_context import create_job_context, JobStatus
 from ModelManager import load_contract
 from Logger import setup_logger
 from utils import construct_image_tag, safe_filename_from_url, download_file
@@ -17,7 +16,7 @@ from utils import construct_image_tag, safe_filename_from_url, download_file
 logger = setup_logger("meld")
 
 
-def load_query(job_context: JobContext) -> str:
+def load_query(file_path: str, job_context: JobContext) -> str:
     """
     Loads a SQL query string from the specified file path.
 
@@ -26,14 +25,13 @@ def load_query(job_context: JobContext) -> str:
     :return: The SQL query string loaded from the file.
     :rtype: str
     """
-    job_context.logger.info(f"Loading query from {job_context.query_path}")
+    job_context.logger.info(f"Loading query from {file_path}")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The file {file_path} does not exist.")
+    if not file_path.endswith(".sql"):
+        raise ValueError(f"The file {file_path} is not a SQL file. ")
 
-    if not os.path.exists(job_context.query_path):
-        raise FileNotFoundError(f"The file {job_context.query_path} does not exist.")
-    if not job_context.query_path.endswith(".sql"):
-        raise ValueError(f"The file {job_context.query_path} is not a SQL file. ")
-
-    with open(job_context.query_path, "r") as file:
+    with open(file_path, "r") as file:
         query = file.read()
         return query
 
@@ -73,10 +71,19 @@ def run_inference(contract_path: str = "contract.yaml") -> None:
     job_context = create_job_context(contract_path)
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
+
+        query_file_name = safe_filename_from_url(job_context.query_url, "query.sql")
+        target_folder = job_context.input_data_path
+        target_file = os.path.join(target_folder, query_file_name)
+        if not os.path.exists(target_file):
+            job_context.logger.info(f"Downloading query file from {job_context.query_url}")
+            download_file(job_context.query_url, target_folder)
+            job_context.logger.info(f"Downloaded query file to {target_folder}")
+
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        query = load_query(job_context)
+        query = load_query(target_file, job_context)
 
         df = query_data(query, params, job_context)
 
@@ -237,25 +244,3 @@ def _normalize_features(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFra
             x[col] = x[col].fillna("").astype(str)
 
     return x
-
-
-def _normalize_column(df: pd.DataFrame, column: str, datatype: str) -> pd.Series:
-    dt = datatype.strip().lower()
-
-    if dt == "integer":
-        return pd.to_numeric(df[column], errors="coerce").astype("Int64")
-    elif dt == "float":
-        return pd.to_numeric(df[column], errors="coerce").astype("Float64")
-    elif dt == "boolean":
-        return df[column].astype("boolean")
-    elif dt in {"datetime", "date"}:
-        return pd.to_datetime(df[column], errors="coerce")
-    elif dt == "duration":
-        return pd.to_timedelta(df[column], errors="coerce")
-    elif dt == "categorical":
-        return df[column].astype("category")
-    elif dt == "string":
-        return df[column].astype("string")
-    else:
-        return df[column].astype("object")
-

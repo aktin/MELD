@@ -57,16 +57,20 @@ def pull_image(image: str, ) -> None:
         an error during the attempt to pull the image.
     """
     try:
-        job_context.log_event(f"Pulling runtime image {image}", JobStatus.PULLING_IMAGE, image=image)
+        logger.info(f"Pulling runtime image {image}")
         client.images.pull(image)
-        job_context.log_event(f"Pulled runtime image {image}", JobStatus.IMAGE_PULLED, image=image)
+        logger.info(f"Pulled runtime image {image}")
     except NotFound as e:
         error = f"Runtime image {image} not found"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        logger.exception(error)
         raise RuntimeError(error)
     except APIError as e:
         error = f"Failed to pull image {image}"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        logger.exception(error)
+        raise RuntimeError(error) from e
+
+
+def delete_image(image: str, ) -> None:
     """
     Deletes a runtime image identified by the given image name.
 
@@ -77,6 +81,17 @@ def pull_image(image: str, ) -> None:
         RuntimeError: If the image is not found.
         RuntimeError: If an API error occurs while attempting to delete the image.
     """
+    try:
+        logger.info(f"Deleting runtime image {image}")
+        client.images.remove(image)
+        logger.info(f"Deleted runtime image {image}")
+    except NotFound as e:
+        error = f"Runtime image {image} not found"
+        logger.exception(error)
+        raise RuntimeError(error)
+    except APIError as e:
+        error = f"Failed to delete image {image}"
+        logger.exception(error)
         raise RuntimeError(error) from e
 
 
@@ -134,8 +149,7 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
         raise RuntimeError(error) from e
 
 
-def wait_for_container(container: Container, job_context: JobContext):
-    TIMEOUT_SECONDS = 500
+def wait_for_container(container: Container, job_context: JobContext, timeout_seconds: int = 500):
     """
     Waits for a specified container to complete its execution within a given timeout period.
 
@@ -158,7 +172,7 @@ def wait_for_container(container: Container, job_context: JobContext):
     log_thread.start()
 
     try:
-        result = container.wait(timeout=TIMEOUT_SECONDS)
+        result = container.wait(timeout=timeout_seconds)
         exit_code = result["StatusCode"]
 
         if exit_code != 0:
@@ -168,8 +182,8 @@ def wait_for_container(container: Container, job_context: JobContext):
             raise RuntimeError(error)
         job_context.log_event("Inference has completed successfully", JobStatus.SUCCESS)
     except requests.exceptions.ReadTimeout:
-        error = f"Runtime container timed out after {TIMEOUT_SECONDS} seconds"
-        job_context.log_event(error, JobStatus.TIMEOUT, timeout=TIMEOUT_SECONDS)
+        error = f"Runtime container timed out after {timeout_seconds} seconds"
+        job_context.log_event(error, JobStatus.TIMEOUT, timeout=timeout_seconds)
         container.kill()
         raise TimeoutError(error)
     finally:
