@@ -86,7 +86,7 @@ case "$1" in
   "install")
     shift
     download_files
-    "$DIR/install.sh" "$@"
+    bash "$DIR/install.sh" "$@"
     ;;
   "inference")
     shift
