@@ -33,7 +33,7 @@ Usage:
 
 Available commands:
   install
-  start
+  inference
   help
 EOF
 }
