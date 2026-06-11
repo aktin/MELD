@@ -40,7 +40,24 @@ EOF
 
 check_installation() {
   if  [ ! -f ./run.sh ]; then
-    die "It seems MELD is not installed. Please install MELD by running meld.sh install"
+    echo "It seems that MELD is not installed. Please install MELD by running \"./meld.sh install\""
+    exit 1
+  fi
+}
+
+check_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is not installed or not available in PATH"
+    exit 1
+  fi
+
+  if docker compose version >/dev/null 2>&1; then
+    echo "Docker Compose plugin is installed"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    echo "Docker Compose standalone is installed"
+  else
+    echo "Docker Compose is not installed"
+    exit 1
   fi
 }
 
@@ -63,6 +80,8 @@ download_files() {
 
 print_logo
 
+check_docker
+
 case "$1" in
   "install")
     shift
@@ -72,7 +91,7 @@ case "$1" in
   "inference")
     shift
     check_installation
-    "$DIR/run.sh" "$@"
+    bash "$DIR/run.sh" "$@"
     ;;
   "help" | "")
     print_help
