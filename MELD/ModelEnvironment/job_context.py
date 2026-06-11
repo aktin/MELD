@@ -72,10 +72,10 @@ class JobContext:
 
     @property
     def image_tag(self):
-        return construct_image_tag(self.contract, )
+        return construct_image_tag(self.contract)
 
     def _get_query_path(self):
-        query_path = os.path.join("/resources", self.contract["input_schema"]["query"]["path"])
+        query_path = os.environ.get("MELD_QUERY_PATH")
         if not os.path.exists(query_path):
             raise Exception(f"Query file for job {self.job_id} does not exist")
         return query_path

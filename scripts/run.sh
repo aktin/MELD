@@ -5,10 +5,10 @@ source ./utils.sh
 
 # Default values
 OUTPUT_DIR="./output"
-COMPOSE_FILE="./compose.yml"
 CONTRACT_FILE=""
 QUERY_FILE=""
 CMD=""
+VERSION="0.1.0"
 
 print_help() {
   cat <<EOF
@@ -16,11 +16,10 @@ Usage:
   meld.sh start [options]
 
 Options:
-  -r, --resources path     Path to resources for contract and query file, required
   -c, --contract           Path or URL of contract, required
   -q, --query              Path of SQL file
   -o, --output DIR         Output directory, default: ./output
-  -f, --file               Custom docker compose file
+  -v, --version            Define MELD version
   -h, --help               Show this help message
 
 Examples:
@@ -34,8 +33,34 @@ set_env_variables() {
   export MELD_CMD="$CMD"
 }
 
+set_docker_env_variables() {
+  docker_env=("-e DB_HOST=host.docker.internal"
+              "-e DB_PORT=5433"
+              "-e DB_USER=i2b2crcdata"
+              "-e DB_PASSWORD=demouser"
+              "-e DB_SCHEMA=i2b2"
+              "-e MELD_CMD=${MELD_CMD}")
+
+}
+
+set_docker_volumes() {
+  docker_volumes=("-v /var/run/docker.sock:/var/run/docker.sock"
+                  "-v ./logs:/logs"
+                  "-v ./jobs/:/jobs/"
+                  "-v ${MELD_OUTPUT_DIR:-./output}:/output"
+                  "-v ${MELD_CONTRACT_PATH:-./}:/resources/contract.yaml:ro"
+                  "-v $HOME/.docker:/root/.docker:ro")
+
+  if [ -n "$QUERY_FILE" ]; then
+    docker_env+=("-v $QUERY_FILE:/resources/query.sql:ro")
+  fi
+}
+
 start_container() {
-  "${DOCKER_COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" up
+  docker run --add-host host.docker.internal:host-gateway \
+    "${docker_env[@]}" \
+    "${docker_volumes[@]}" \
+    ghcr.io/simhue/meld:${VERSION:-latest}
 }
 
 # Parse arguments
@@ -50,11 +75,6 @@ while [[ $# -gt 0 ]]; do
       OUTPUT_DIR="$2"
       shift 2
       ;;
-    -f|--file)
-      [[ $# -ge 2 ]] || echo "Missing value for $1"
-      COMPOSE_FILE="$2"
-      shift 2
-      ;;
     -c|--contract)
       [[ $# -ge 2 ]] || echo "Missing value for $1"
       CONTRACT_FILE="$2"
@@ -62,7 +82,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     -q|--query)
       [[ $# -ge 2 ]] || echo "Missing value for $1"
-      echo "Not used at the moment"
       QUERY_FILE="$2"
       shift 2
       ;;
@@ -89,9 +108,11 @@ done
 [[ -n "$CMD" ]] || { echo "Missing command"; exit 1; }
 [[ -n "$CONTRACT_FILE" ]] || { echo "Missing required argument: --contract"; exit 1; }
 
-get_docker_compose_cmd
-
 require_file "$CONTRACT_FILE"
+
+if [ -n "$QUERY_FILE" ]; then
+  require_file "$QUERY_FILE"
+fi
 
 set_env_variables
 

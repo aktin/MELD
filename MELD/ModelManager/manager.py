@@ -1,4 +1,5 @@
 import os
+import shutil
 from datetime import datetime, timedelta
 
 import isodate
@@ -18,12 +19,26 @@ logger = setup_logger("meld")
 
 def load_query(file_path: str, job_context: JobContext) -> str:
     """
-    Loads a SQL query string from the specified file path.
+    Loads the SQL query from the specified file.
 
-    :param path: The file path to the query file to be loaded.
-    :type path: str
-    :return: The SQL query string loaded from the file.
-    :rtype: str
+    Parameters:
+    file_path: str
+        The path to the SQL file to be loaded.
+
+    job_context: JobContext
+        The context object that includes the logger to be used for
+        logging file loading operations.
+
+    Raises:
+    FileNotFoundError
+        If the specified file path does not exist.
+
+    ValueError
+        If the provided file path is not a SQL file.
+
+    Returns:
+    str
+        The content of the SQL file as a string.
     """
     job_context.logger.info(f"Loading query from {file_path}")
     if not os.path.exists(file_path):
@@ -38,12 +53,16 @@ def load_query(file_path: str, job_context: JobContext) -> str:
 
 def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFrame:
     """
-    Executes a given SQL query with parameters and returns the result as a pandas DataFrame.
+    Executes a SQL query and returns the resulting data as a DataFrame.
 
-    :param query: SQL query string to be executed.
-    :param params: Dictionary of parameters to be used in the SQL query.
-    :return: A pandas DataFrame containing the results of the executed query.
-    :rtype: pd.DataFrame
+    Arguments:
+    query: A string representing the SQL query to execute.
+    params: A dictionary of parameters to use in the query.
+    job_context: An instance of JobContext used for logging and contextual information
+    relevant to the job execution.
+
+    Returns:
+    A pandas DataFrame containing the query results.
     """
     job_context.logger.info(f"Executing query")
     start = datetime.now()
@@ -69,16 +88,25 @@ def run_inference(contract_path: str = "contract.yaml") -> None:
     None
     """
     job_context = create_job_context(contract_path)
+    default_path = "/resources/query.sql"
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
 
-        query_file_name = safe_filename_from_url(job_context.query_url, "query.sql")
         target_folder = job_context.input_data_path
-        target_file = os.path.join(target_folder, query_file_name)
-        if not os.path.exists(target_file):
+
+        # check if query file was already mounted into docker container,
+        if os.path.exists(default_path):
+            job_context.logger.info(f"Query file was already mounted into docker container, overwriting query url from contract")
+            query_file_name = "query.sql"
+            shutil.copy(default_path, os.path.join(target_folder, query_file_name))
+            job_context.logger.info(f"Moved query file to {target_folder}")
+        else:
+            query_file_name = safe_filename_from_url(job_context.query_url)
             job_context.logger.info(f"Downloading query file from {job_context.query_url}")
             download_file(job_context.query_url, target_folder)
             job_context.logger.info(f"Downloaded query file to {target_folder}")
+
+        target_file = os.path.join(target_folder, query_file_name)
 
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}

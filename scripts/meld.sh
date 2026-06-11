@@ -3,6 +3,10 @@ set -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+scripts=("run.sh"
+          "utils.sh"
+          "install.sh")
+
 print_logo() {
   cat <<EOF
   
@@ -33,6 +37,7 @@ Usage:
 
 Available commands:
   install
+  update
   inference
   help
 EOF
@@ -51,14 +56,14 @@ check_docker() {
     exit 1
   fi
 
-  if docker compose version >/dev/null 2>&1; then
-    echo "Docker Compose plugin is installed"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    echo "Docker Compose standalone is installed"
-  else
-    echo "Docker Compose is not installed"
-    exit 1
-  fi
+#  if docker compose version >/dev/null 2>&1; then
+#    echo "Docker Compose plugin is installed"
+#  elif command -v docker-compose >/dev/null 2>&1; then
+#    echo "Docker Compose standalone is installed"
+#  else
+#    echo "Docker Compose is not installed"
+#    exit 1
+#  fi
 }
 
 download_file_if_not_exist() {
@@ -68,25 +73,36 @@ download_file_if_not_exist() {
   fi
 }
 
-download_files() {
-  download_file_if_not_exist run.sh
+download_scripts() {
+  for s in "${scripts[@]}"; do
+    download_file_if_not_exist "$s"
+  done
+}
 
-  download_file_if_not_exist compose.yml
-
-  download_file_if_not_exist utils.sh
-
-  download_file_if_not_exist install.sh
+delete_scripts() {
+  for s in "${scripts[@]}"; do
+    rm "./$s"
+  done
 }
 
 print_logo
 
 check_docker
 
+
 case "$1" in
   "install")
-    shift
-    download_files
+    download_scripts
     bash "$DIR/install.sh" "$@"
+    ;;
+  "update")
+    delete_scripts
+    download_scripts
+    bash "$DIR/install.sh" "$@"
+    ;;
+  "uninstall")
+    bash "$DIR/install.sh" "$@"
+    delete_scripts
     ;;
   "inference")
     shift

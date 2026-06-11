@@ -126,10 +126,6 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
     """
     Starts a runtime container and updates the job context accordingly.
 
-    This function attempts to start the specified container and logs the appropriate
-    events in the job context. If the container fails to start, a RuntimeError is
-    raised, and the failure is logged in the job context.
-
     Parameters:
         container (Container): The container instance to be started.
         job_context (JobContext): The context of the job, including logging and
@@ -142,7 +138,7 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
     try:
         job_context.logger.info(f"Starting runtime container {container.id}")
         container.start()
-        job_context.log_event("Starting runtime container", JobStatus.RUNNING)
+        job_context.log_event("Started runtime container", JobStatus.RUNNING)
     except APIError as e:
         error = f"Failed to start runtime container"
         job_context.log_event(error, JobStatus.FAILED, error=str(e))

@@ -6,34 +6,12 @@ This module provides helper functions to resolve file paths relative to a
 base directory, load and parse YAML files into dictionaries, sanitize and
 validate URLs, generate safe filenames, and download files from the web.
 """
-import os
 import re
 from pathlib import Path
 from urllib.parse import urlsplit, unquote, quote, urlunsplit
 from urllib.request import Request, urlopen
 
 import yaml
-
-
-def resolve_path(path_from_contract: str, base_dir: str | Path | None = None) -> str:
-    """
-    Resolve a file system path relative to a base directory.
-
-    This function combines a given relative path with a base directory
-    or the parent directory of the script. It then resolves the result
-    to a full, absolute path.
-
-    :param path_from_contract: A relative path to be resolved.
-    :type path_from_contract: str
-    :param base_dir: The base directory to resolve the relative path against.
-                     If not provided, the parent directory of the current script 
-                     will be used.
-    :type base_dir: str | Path | None
-    :return: The absolute resolved path as a string.
-    :rtype: str
-    """
-    root = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parent.parent
-    return str((root / path_from_contract).resolve())
 
 
 def load_yaml(path: str) -> dict:
@@ -65,13 +43,13 @@ def construct_image_tag(contract: dict) -> str:
     dictionary.
 
     Parameters:
-    contract (dict): Dictionary containing the 'inference' section with
+    contract (dict): Dictionary containing the 'runtime' section with
     the keys 'image_tag' and 'version'.
 
     Returns:
     str: A formatted image tag string in the format "<image_tag>:<version>".
     """
-    return f"{contract['inference']['image_tag']}:{contract['inference']['version']}"
+    return f"{contract['runtime']['image_tag']}:{contract['runtime']['version']}"
 
 
 def _sanitize_url(url: str) -> str:
@@ -114,12 +92,6 @@ def _sanitize_url(url: str) -> str:
 def safe_filename_from_url(url: str, default: str = "downloaded_file") -> str:
     """
     Generate a safe filename from a URL.
-
-    This function takes a URL and extracts its path to generate a filename
-    that avoids unsafe or problematic characters. If the resulting filename
-    is hidden, empty, or invalid, it defaults to a provided string. This is
-    useful for saving files from URLs while ensuring compatibility with
-    various file systems.
 
     Parameters:
     url : str
