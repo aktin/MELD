@@ -44,15 +44,15 @@ set_docker_env_variables() {
 }
 
 set_docker_volumes() {
-  docker_volumes=("-v /var/run/docker.sock:/var/run/docker.sock"
-                  "-v ./logs:/logs"
-                  "-v ./jobs/:/jobs/"
-                  "-v ${MELD_OUTPUT_DIR:-./output}:/output"
-                  "-v ${MELD_CONTRACT_PATH:-./}:/resources/contract.yaml:ro"
-                  "-v $HOME/.docker:/root/.docker:ro")
+  docker_volumes=("--volume=/var/run/docker.sock:/var/run/docker.sock"
+                  "--volume=./logs:/logs"
+                  "--volume=./jobs/:/jobs/"
+                  "--volume=${MELD_OUTPUT_DIR:-./output}:/output"
+                  "--volume=${MELD_CONTRACT_PATH:-./}:/resources/contract.yaml:ro"
+                  "--volume=$HOME/.docker:/root/.docker:ro")
 
   if [ -n "$QUERY_FILE" ]; then
-    docker_env+=("-v $QUERY_FILE:/resources/query.sql:ro")
+    docker_volumes+=("--volume=$QUERY_FILE:/resources/query.sql:ro")
   fi
 }
 
