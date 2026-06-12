@@ -27,15 +27,16 @@ def stream_container_logs(container: Container, job_context: JobContext) -> None
         Exception: If an error occurs while streaming container logs.
     """
     try:
+        container_logger = setup_logger(f"meld.job{job_context.job_id}.inference", logs_path=job_context.logs_path)
         for stdout_chunk, stderr_chunk in container.attach(stdout=True, stderr=True, stream=True, logs=True,
                                                            demux=True):
             if stdout_chunk:
                 text = stdout_chunk.decode("utf-8", errors="replace")
-                job_context.logger.info(text.rstrip())
+                container_logger.info(text.rstrip())
 
             if stderr_chunk:
                 text = stderr_chunk.decode("utf-8", errors="replace")
-                job_context.logger.error(text.rstrip())
+                container_logger.error(text.rstrip())
 
             sys.stdout.flush()
             sys.stderr.flush()
@@ -260,3 +261,7 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         error = f"Failed to create image {image}"
         job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
         raise RuntimeError(error) from e
+
+
+def login():
+    client.login()
