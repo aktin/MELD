@@ -1,4 +1,7 @@
 #!/bin/sh
 
+image_name="meld-orchestrator"
+version="0.1.0-alpha"
+
 cd ../MELD
-docker build -t ghcr.io/simhue/meld:latest -t ghcr.io/simhue/meld:0.1.0 -f Dockerfile .
+docker build -t "ghcr.io/simhue/$image_name:latest" -t "ghcr.io/simhue/$image_name:$version" -f Dockerfile .

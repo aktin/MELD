@@ -3,8 +3,8 @@ set -e
 
 source ./utils.sh
 
-DOCKER_IMAGE="ghcr.io/simhue/meld"
-VERSION="0.1.0"
+DOCKER_IMAGE="ghcr.io/simhue/meld-orchestrator"
+VERSION="0.1.0-alpha"
 
 print_help() {
   cat <<EOF
@@ -12,7 +12,6 @@ Usage:
   $(basename "$0") [options]
 
 Options:
-  -v, --version          Define MELD version
   -h, --help             Show this help message
 
 EOF
