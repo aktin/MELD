@@ -1,6 +1,7 @@
 import io
 import os
 import tarfile
+import zipfile
 
 from docker.errors import APIError
 from docker.models.containers import Container
@@ -35,6 +36,7 @@ def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_c
             yaml.dump(job_context.contract, f)
 
         buf = io.BytesIO()
+        # tar because docker.models.containers.Container.put_archive expects a tar archive as stream or bytes
         with tarfile.open(fileobj=buf, mode="w:gz") as f:
             f.add(job_context.input_data_path, arcname="")
 
@@ -50,7 +52,7 @@ def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_c
         raise RuntimeError(error) from e
 
 
-def pack_result_files(output_tar_path: str, archive_bytes: io.BytesIO, job_context: JobContext) -> None:
+def pack_result_files(output_zip_path: str, archive_bytes: io.BytesIO, job_context: JobContext) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
 
@@ -67,37 +69,52 @@ def pack_result_files(output_tar_path: str, archive_bytes: io.BytesIO, job_conte
         tarfile.TarError: If there's an error processing the tar files.
     """
     job_context.logger.info(f"Packing result files")
-    with tarfile.open(output_tar_path, mode="w:gz") as out_tar:
+    with zipfile.ZipFile(output_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as out_zip:
         with tarfile.open(fileobj=archive_bytes, mode="r:*") as in_tar:
             for member in in_tar.getmembers():
-                extracted = in_tar.extractfile(member) if member.isfile() else None
-                if extracted is not None:
-                    data = extracted.read()
-                    info = tarfile.TarInfo(name=member.name)
-                    info.size = len(data)
-                    out_tar.addfile(info, io.BytesIO(data))
-                else:
-                    out_tar.addfile(member, fileobj=None)
+                if member.isfile():
+                    extracted = in_tar.extractfile(member)
+                    if extracted is not None:
+                        out_zip.writestr(os.path.join("output", member.name), extracted.read())
+                elif member.isdir():
+                    dirname = member.name.rstrip("/") + "/"
+                    out_zip.writestr(os.path.join("output", member.name), b"")
 
 
-def pack_metadata_and_logs(output_tar_path: str, job_context: JobContext) -> None:
+def pack_metadata_and_logs(output_zip_path: str, job_context: JobContext) -> None:
     """
     Packs metadata, logs, and input data into a compressed tarball.
 
     Parameters:
-        output_tar_path (str): The file path where the tarball will be created.
+        output_zip_path (str): The file path where the tarball will be created.
         job_context (JobContext): The context object containing job-related paths
             and logging information.
 
     Raises:
         TarError: If an error occurs during the tarball creation process.
     """
-    job_context.logger.info(f"Packing metadata and logs")
-    with tarfile.open(output_tar_path, mode="w:gz") as out_tar:
-        out_tar.add(job_context.input_data_path, arcname="output/")
-        #out_tar.add(job_context.contract_path, arcname="output/contract.yaml")
-        out_tar.add(job_context.logs_path, arcname="output/logs")
-        out_tar.add(job_context.status_path, arcname="output/status")
+    job_context.logger.info("Packing metadata and logs")
+    with zipfile.ZipFile(output_zip_path, mode="a", compression=zipfile.ZIP_DEFLATED) as out_zip:
+        for root, _, files in os.walk(job_context.input_data_path):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                arcname = os.path.join("input", os.path.relpath(file_path, job_context.input_data_path))
+                out_zip.write(file_path, arcname)
+
+        for path, arcname in (
+            (job_context.logs_path, "logs"),
+            (job_context.status_path, "status"),
+        ):
+            if os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    for file_name in files:
+                        file_path = os.path.join(root, file_name)
+                        out_zip.write(
+                            file_path,
+                            os.path.join(arcname, os.path.relpath(file_path, path)),
+                        )
+            else:
+                out_zip.write(path, arcname)
 
 
 def get_output_data_from_container(container: Container, job_context: JobContext) -> io.BytesIO:
@@ -134,7 +151,7 @@ def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
     """
     job_context.log_event("Running inference", JobStatus.RUNNING)
     image = job_context.image_tag
-    output_tar_path = os.path.join(job_context.output_data_path, "output.tar.gz")
+    output_tar_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
     runtime_container = None
     try:
         ensure_image_exists(job_context)

@@ -8,22 +8,27 @@ OUTPUT_DIR="./output"
 CONTRACT_FILE=""
 QUERY_FILE=""
 CMD=""
-VERSION="0.1.0"
+VERSION="0.1.0-alpha"
+IMAGE_NAME="meld-orchestrator"
 
 print_help() {
   cat <<EOF
 Usage:
-  meld.sh start [options]
+  meld.sh inference [command] [options]
+
+Commands:
+  pull                    Pull inference image defined in contract
+  run                     Run inference image defined in contract
+  delete                  Delete inference image defined in contract
 
 Options:
-  -c, --contract           Path or URL of contract, required
-  -q, --query              Path of SQL file
-  -o, --output DIR         Output directory, default: ./output
-  -v, --version            Define MELD version
+  -c, --contract           Path of contract, required
+  -q, --query              Path of SQL file, overwrites query url in contract
+  -o, --output             Output directory, default: ./output
   -h, --help               Show this help message
 
 Examples:
-  meld.sh install --resources /path/to/resources/ --output ./output
+  meld.sh inference run --contract /path/to/query.sql --output ./output
 EOF
 }
 
@@ -34,13 +39,12 @@ set_env_variables() {
 }
 
 set_docker_env_variables() {
-  docker_env=("-e DB_HOST=host.docker.internal"
-              "-e DB_PORT=5433"
-              "-e DB_USER=i2b2crcdata"
-              "-e DB_PASSWORD=demouser"
-              "-e DB_SCHEMA=i2b2"
-              "-e MELD_CMD=${MELD_CMD}")
-
+  docker_env=("--env=DB_HOST=host.docker.internal"
+              "--env=DB_PORT=5433"
+              "--env=DB_USER=i2b2crcdata"
+              "--env=DB_PASSWORD=demouser"
+              "--env=DB_SCHEMA=i2b2"
+              "--env=MELD_CMD=${MELD_CMD}")
 }
 
 set_docker_volumes() {
@@ -48,19 +52,16 @@ set_docker_volumes() {
                   "--volume=./logs:/logs"
                   "--volume=./jobs/:/jobs/"
                   "--volume=${MELD_OUTPUT_DIR:-./output}:/output"
-                  "--volume=${MELD_CONTRACT_PATH:-./}:/resources/contract.yaml:ro"
-                  "--volume=$HOME/.docker:/root/.docker:ro")
-
-  if [ -n "$QUERY_FILE" ]; then
-    docker_volumes+=("--volume=$QUERY_FILE:/resources/query.sql:ro")
-  fi
+                  "--volume=${MELD_CONTRACT_PATH:-./contract.yaml}:/resources/contract.yaml:ro"
+                  "--volume=$HOME/.docker:/root/.docker:ro"
+                  "--volume=${QUERY_FILE:-./query.sql}:/resources/query.sql:ro")
 }
 
 start_container() {
   docker run --add-host host.docker.internal:host-gateway \
-    "${docker_env[@]}" \
-    "${docker_volumes[@]}" \
-    ghcr.io/simhue/meld:${VERSION:-latest}
+      "${docker_env[@]}" \
+      "${docker_volumes[@]}" \
+      ghcr.io/simhue/${IMAGE_NAME}:${VERSION:-latest} #umbenennen in meld-orchestrator
 }
 
 # Parse arguments
@@ -115,5 +116,7 @@ if [ -n "$QUERY_FILE" ]; then
 fi
 
 set_env_variables
+set_docker_volumes
+set_docker_env_variables
 
 start_container
