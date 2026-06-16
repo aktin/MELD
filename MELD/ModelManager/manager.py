@@ -8,7 +8,7 @@ import ModelEnvironment
 import pandas as pd
 from InternalDataLoader import execute_query
 from ModelEnvironment import JobContext
-from ModelEnvironment.docker_runtime import pull_image, delete_image
+from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_image_exists
 from ModelEnvironment.job_context import create_job_context, JobStatus
 from ModelManager import load_contract
 from Logger import setup_logger
@@ -91,6 +91,8 @@ def run_inference(contract_path: str = "contract.yaml") -> None:
     default_path = "/resources/query.sql"
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
+
+        ensure_image_exists(job_context)
 
         target_folder = job_context.input_data_path
 

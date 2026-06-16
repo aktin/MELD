@@ -154,8 +154,6 @@ def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
     output_tar_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
     runtime_container = None
     try:
-        ensure_image_exists(job_context)
-
         runtime_container = create_container(image, job_context, )
 
         copy_data_to_container(runtime_container, input_data, job_context)
