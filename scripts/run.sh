@@ -38,30 +38,31 @@ set_env_variables() {
   export MELD_CMD="$CMD"
 }
 
-set_docker_env_variables() {
-  docker_env=("--env=DB_HOST=host.docker.internal"
-              "--env=DB_PORT=5433"
-              "--env=DB_USER=i2b2crcdata"
-              "--env=DB_PASSWORD=demouser"
-              "--env=DB_SCHEMA=i2b2"
-              "--env=MELD_CMD=${MELD_CMD}")
-}
-
-set_docker_volumes() {
-  docker_volumes=("--volume=/var/run/docker.sock:/var/run/docker.sock"
-                  "--volume=./logs:/logs"
-                  "--volume=./jobs/:/jobs/"
-                  "--volume=${MELD_OUTPUT_DIR:-./output}:/output"
-                  "--volume=${MELD_CONTRACT_PATH:-./contract.yaml}:/resources/contract.yaml:ro"
-                  "--volume=$HOME/.docker:/root/.docker:ro"
-                  "--volume=${QUERY_FILE:-./query.sql}:/resources/query.sql:ro")
-}
+#set_docker_env_variables() {
+#  docker_env=("--env=DB_HOST=host.docker.internal"
+#              "--env=DB_PORT=5433"
+#              "--env=DB_USER=i2b2crcdata"
+#              "--env=DB_PASSWORD=demouser"
+#              "--env=DB_SCHEMA=i2b2"
+#              "--env=MELD_CMD=${MELD_CMD}")
+#}
+#
+#set_docker_volumes() {
+#  docker_volumes=("--volume=/var/run/docker.sock:/var/run/docker.sock"
+#                  "--volume=./logs:/logs"
+#                  "--volume=./jobs/:/jobs/"
+#                  "--volume=${MELD_OUTPUT_DIR:-./output}:/output"
+#                  "--volume=${MELD_CONTRACT_PATH:-./contract.yaml}:/resources/contract.yaml:ro"
+#                  "--volume=$HOME/.docker:/root/.docker:ro"
+#                  "--volume=${QUERY_FILE:-./query.sql}:/resources/query.sql:ro")
+#}
 
 start_container() {
-  docker run --add-host host.docker.internal:host-gateway \
-      "${docker_env[@]}" \
-      "${docker_volumes[@]}" \
-      ghcr.io/simhue/${IMAGE_NAME}:${VERSION:-latest} #umbenennen in meld-orchestrator
+#  docker run --add-host host.docker.internal:host-gateway \
+#      "${docker_env[@]}" \
+#      "${docker_volumes[@]}" \
+#      ghcr.io/simhue/${IMAGE_NAME}:${VERSION:-latest} #umbenennen in meld-orchestrator
+  docker compose up
 }
 
 # Parse arguments
@@ -72,7 +73,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -o|--output)
-      [[ $# -ge 2 ]] || echo "Missing value for $1"
+       [[ $# -ge 2 ]] || echo "Missing value for $1"
       OUTPUT_DIR="$2"
       shift 2
       ;;
@@ -115,8 +116,8 @@ if [ -n "$QUERY_FILE" ]; then
   require_file "$QUERY_FILE"
 fi
 
-set_env_variables
-set_docker_volumes
-set_docker_env_variables
+#set_env_variables
+#set_docker_volumes
+#set_docker_env_variables
 
 start_container
