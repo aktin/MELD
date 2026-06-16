@@ -9,7 +9,7 @@ schema = os.getenv("DB_SCHEMA")
 password_file = os.getenv("DB_PASSWORD_FILE")
 
 with open(password_file, "r") as f:
-    password = f.read()
+    password = f.readline().strip()
 
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{schema}")
 engine.connect()
