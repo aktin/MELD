@@ -94,19 +94,7 @@ def run_inference(contract_path: str = "contract.yaml") -> None:
 
         target_folder = job_context.input_data_path
 
-        # check if query file was already mounted into docker container,
-        if os.path.exists(default_path):
-            job_context.logger.info(f"Query file was already mounted into docker container, overwriting query url from contract")
-            query_file_name = "query.sql"
-            shutil.copy(default_path, os.path.join(target_folder, query_file_name))
-            job_context.logger.info(f"Moved query file to {target_folder}")
-        else:
-            query_file_name = safe_filename_from_url(job_context.query_url)
-            job_context.logger.info(f"Downloading query file from {job_context.query_url}")
-            download_file(job_context.query_url, target_folder)
-            job_context.logger.info(f"Downloaded query file to {target_folder}")
-
-        target_file = os.path.join(target_folder, query_file_name)
+        target_file = os.path.join(target_folder, job_context.query_path)
 
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}

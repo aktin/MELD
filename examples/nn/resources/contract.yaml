@@ -42,7 +42,7 @@ input_schema:
 
   query:
     type: "sql"
-    url: "https://raw.githubusercontent.com/aktin/MELD/refs/heads/main/examples/nn/resources/long-query.sql"
+    checksum: ""
 
 output_schema:
   format: "csv"

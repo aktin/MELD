@@ -45,7 +45,6 @@ class JobContext:
         output_data_path (str): Path to the output data folder for the job.
         status_path (str): Path to the status folder for the job.
         logs_path (str): Path to the logs folder for the job.
-        query_url (str): The input query URL specified in the job's contract.
         logger (logging.Logger): The logger used for job-related logging.
     """
 
@@ -64,8 +63,7 @@ class JobContext:
         self.output_data_path = self._create_output_folder()
         self.status_path = self._create_status_folder()
         self.logs_path = self._create_log_folder()
-        self.query_url = self.contract["input_schema"]["query"]["url"]
-        # self.query_path = self._get_query_path()
+        self.query_path = "/resources/query.sql"
 
         self.logger = setup_logger(f"meld.job{self.job_id}", logs_path=self.logs_path, )
         self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
@@ -123,7 +121,7 @@ class JobContext:
             }, f, sort_keys=True, indent=4)
 
     def log_event(self, message: str, event: JobStatus, **kwargs):
-        self.logger.info(message)
+        self.logger.debug(message)
         self.set_status(event)
         with open(os.path.join(self.status_path, "events.jsonl"), "a") as f:
             f.write(json.dumps(
