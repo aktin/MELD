@@ -17,7 +17,7 @@ services:
       - "./logs:/logs"
       - "./jobs/:/jobs/"
       - "${MELD_OUTPUT_DIR:-./output}:/output"
-      - "${MELD_CONTRACT_PATH:-./contract.yaml}:/resources/contract.yaml:ro"
+      - "${MELD_CONTRACT_FILE:-./contract.yaml}:/resources/contract.yaml:ro"
       - "${MELD_QUERY_FILE:-./query.sql}:/resources/query.sql:ro"
       - "~/.docker:/root/.docker:ro" # for ghcr authentication when logged in on host
 

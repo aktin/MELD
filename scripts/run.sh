@@ -33,7 +33,8 @@ EOF
 }
 
 set_env_variables() {
-  export MELD_CONTRACT_PATH="$CONTRACT_FILE"
+  export MELD_CONTRACT_FILE="$CONTRACT_FILE"
+  export MELD_QUERY_FILE="$QUERY_FILE"
   export MELD_OUTPUT_DIR="$OUTPUT_DIR"
   export MELD_CMD="$CMD"
 }
@@ -52,7 +53,7 @@ set_env_variables() {
 #                  "--volume=./logs:/logs"
 #                  "--volume=./jobs/:/jobs/"
 #                  "--volume=${MELD_OUTPUT_DIR:-./output}:/output"
-#                  "--volume=${MELD_CONTRACT_PATH:-./contract.yaml}:/resources/contract.yaml:ro"
+#                  "--volume=${MELD_CONTRACT_FILE:-./contract.yaml}:/resources/contract.yaml:ro"
 #                  "--volume=$HOME/.docker:/root/.docker:ro"
 #                  "--volume=${QUERY_FILE:-./query.sql}:/resources/query.sql:ro")
 #}
@@ -116,7 +117,7 @@ if [ -n "$QUERY_FILE" ]; then
   require_file "$QUERY_FILE"
 fi
 
-#set_env_variables
+set_env_variables
 #set_docker_volumes
 #set_docker_env_variables
 
