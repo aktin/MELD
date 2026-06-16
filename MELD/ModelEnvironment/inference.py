@@ -3,14 +3,15 @@ import os
 import tarfile
 import zipfile
 
+import pandas as pd
+import yaml
 from docker.errors import APIError
 from docker.models.containers import Container
 
-import pandas as pd
-import yaml
-from ModelEnvironment.docker_runtime import ensure_image_exists, create_container, start_container, wait_for_container, \
+from ModelEnvironment.docker_runtime import create_container, start_container, wait_for_container, \
     stop_container, destroy_container
 from ModelEnvironment.job_context import JobContext, JobStatus
+
 
 def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_context: JobContext) -> None:
     """
@@ -69,16 +70,17 @@ def pack_result_files(output_zip_path: str, archive_bytes: io.BytesIO, job_conte
         tarfile.TarError: If there's an error processing the tar files.
     """
     job_context.logger.info(f"Packing result files")
+    archive_bytes.seek(0)
+
     with zipfile.ZipFile(output_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as out_zip:
         with tarfile.open(fileobj=archive_bytes, mode="r:*") as in_tar:
             for member in in_tar.getmembers():
-                if member.isfile():
-                    extracted = in_tar.extractfile(member)
-                    if extracted is not None:
-                        out_zip.writestr(os.path.join("output", member.name), extracted.read())
-                elif member.isdir():
-                    dirname = member.name.rstrip("/") + "/"
-                    out_zip.writestr(os.path.join("output", member.name), b"")
+                if not member.isfile():
+                    continue
+
+                extracted = in_tar.extractfile(member)
+                if extracted is not None:
+                    out_zip.writestr(member.name, extracted.read())
 
 
 def pack_metadata_and_logs(output_zip_path: str, job_context: JobContext) -> None:
