@@ -1,7 +1,7 @@
 import keras
 import pandas as pd
 import tensorflow as tf
-from utils import load_yaml
+import yaml
 from pandas import DataFrame
 
 
@@ -81,7 +81,9 @@ def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
 
 
 if __name__ == "__main__":
-    config = load_yaml("/input/contract.yaml")
+    with open("/input/contract.yaml", "r") as file:
+        config = yaml.safe_load(file)
+
     with open("/input/input.csv", "r") as f:
         result = run_inference(pd.read_csv(f), config)
 

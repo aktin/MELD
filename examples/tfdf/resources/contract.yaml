@@ -1,67 +1,39 @@
-inference:
-  name: "stationary-admission-test"
-  version: "latest"
-  checksum: "sha256:..."
-  image_tag: "examples/tfdf"
+contract:
+  name: "stationary-admission-test-tfdf"
+  version: "0.1.0"
 
 runtime:
   framework: "tensorflow-tfdf"
-  # checksum: "sha256:..." # is this still necessary?
-  version: "1.0.0"
+  image:
+    name: "ghcr.io/simhue/meld/runtime_examples/tfdf"
+    tag: "0.1.0"
+    digest: "sha256:d7a0d999b4647543f72ceab7d07a2cd09e7c07ef497a4bb1aa3a765ebac36a9e"
   environment_variables:
-    TF_CPP_MIN_LOG_LEVEL: 2
-
-model:
-  format: "tensorflow-tfdf"
-  version: "1.0.0"
-  # checksum: "sha256:..." # is this still necessary?
-#  version: "latest"
+    TF_CPP_MIN_LOG_LEVEL: "3"
 
 input_schema:
   temporal_scope:
-    type: "relative"   # relative | absolute
-    value: "-P1M"       # ISO 8601 duration
+    type: "relative" # relative | absolute
+    value: "-P1M" # ISO 8601 duration
     anchor: "2026-04-23T13:56:55.525240" # the anchor date for relative temporal scope
 
   features:
     - name: "cedis_code"
-      datatype: "integer"
-      required: true
+      datatype: "string"
     - name: "age"
       datatype: "string"
-      required: true
     - name: "admission_time"
       datatype: "datetime"
-      required: true
     - name: "triage_score"
       datatype: "integer"
-      required: true
-
-#  hyperparameters:
-#    - name: "learning_rate"
-#      datatype: "float"
-#      required: true
 
   query:
     type: "sql"
-    path: "long-query.sql"
+    digest: "sha256:d1a7f2c577602fb47d78c25483559c2495691737fec9cb2d6aa106b2229e6537"
 
 output_schema:
   format: "csv"
   predictor:
-    - name: "should_have_been_admitted"
+    - name: "admitted"
       datatype: "integer"
 
-logging:
-  stdout:
-    format: text
-    level: INFO
-  archive:
-    format: jsonl
-    path: logs/inference.jsonl
-  required_fields:
-    - run_id
-    - artifact_id
-    - model_id
-    - framework
-    - phase

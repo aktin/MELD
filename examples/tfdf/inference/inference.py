@@ -1,13 +1,8 @@
-import os
 import keras
 import pandas as pd
 import tensorflow as tf
+import yaml
 from pandas import DataFrame
-
-from Logger import setup_logger
-from utils import load_yaml
-
-logger = setup_logger("inference")
 
 
 def _cast_series_for_model(series: pd.Series, spec: dict) -> tf.Tensor:
@@ -34,8 +29,11 @@ def _to_tensor_inputs(df: pd.DataFrame, config: dict) -> dict[str, tf.Tensor]:
     features = config["input_schema"]["features"]
 
     for col in df.columns:
-        spec = [f for f in features if f["name"] == col][0]
-        inputs[col] = _cast_series_for_model(df[col], spec)
+        try:
+            spec = [f for f in features if f["name"] == col][0]
+            inputs[col] = _cast_series_for_model(df[col], spec)
+        except IndexError:
+            continue
 
     return inputs
 
@@ -58,21 +56,21 @@ def _extract_prediction_series(raw_predictions, expected_len: int) -> pd.Series:
 
 
 def _load_decision_tree(path: str) -> keras.layers.TFSMLayer:
-    import tensorflow_decision_forests
-    logger.info(f"Loading decision tree")
+    import tensorflow_decision_forests as tfdf # do not remove, otherwise the model cannot be loaded and the inference fails
+    print(f"Loading decision tree")
     model = tf.saved_model.load(path)
-    logger.info(f"Model loaded")
+    print(f"Model loaded")
     return model.signatures["serving_default"]
 
 
 def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
-    logger.info(f"Inference with {len(df)} rows.")
+    print(f"Inference with {len(df)} rows.")
     inputs = _to_tensor_inputs(df, config)
 
     model_path = "/artifact/"
     model_layer = _load_decision_tree(model_path)
 
-    logger.info(f"Run inference")
+    print(f"Run inference")
     raw_predictions = model_layer(**inputs)
     prediction_series = _extract_prediction_series(raw_predictions, len(df))
 
@@ -81,13 +79,14 @@ def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
 
     result_df[predictor_name] = prediction_series
 
-    logger.info(f"Inference done")
+    print(f"Inference done")
 
     return result_df
 
 
 if __name__ == "__main__":
-    config = load_yaml("/input/contract.yaml")
+    with open("/input/contract.yaml", "r") as file:
+        config = yaml.safe_load(file)
     with open("/input/input.csv", "r") as f:
         result = run_inference(pd.read_csv(f), config)
 

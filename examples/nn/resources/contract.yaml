@@ -1,19 +1,15 @@
-inference:
-  name: "stationary-admission-test"
-  version: "0.1.0"
-
+contract:
+  name: "stationary-admission-test-nn"
+  version: "0.2.0"
 
 runtime:
   framework: "tensorflow"
-  version: "0.1.0"
-  # checksum: "sha256:519abbabb0b3e8f379c73b2754749b984cfc72d618bb5cd6529b65e2efcaf02d"
-  image_tag: "ghcr.io/simhue/meld-examples-nn"
+  image:
+    name: "ghcr.io/simhue/meld/runtime_examples/nn"
+    tag: "0.2.0"
+    digest: "sha256:af99356afc28955895878fea10db2c8aeb4917e178de76c301d1c15393982939"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
-
-model:
-  format: "tensorflow"
-  version: "1.0.0"
 
 input_schema:
   temporal_scope:
@@ -24,25 +20,16 @@ input_schema:
   features:
     - name: "cedis_code"
       datatype: "string"
-      required: true
     - name: "age"
       datatype: "string"
-      required: true
     - name: "admission_time"
       datatype: "datetime"
-      required: true
     - name: "triage_score"
       datatype: "integer"
-      required: true
-
-#  hyperparameters:
-#    - name: "learning_rate"
-#      datatype: "float"
-#      required: true
 
   query:
     type: "sql"
-    checksum: ""
+    digest: "sha256:d1a7f2c577602fb47d78c25483559c2495691737fec9cb2d6aa106b2229e6537"
 
 output_schema:
   format: "csv"
@@ -50,16 +37,3 @@ output_schema:
     - name: "admitted"
       datatype: "integer"
 
-logging:
-  stdout:
-    format: text
-    level: INFO
-  archive:
-    format: jsonl
-    path: logs/inference.jsonl
-  required_fields:
-    - run_id
-    - artifact_id
-    - model_id
-    - framework
-    - phase
