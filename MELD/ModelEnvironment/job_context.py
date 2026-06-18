@@ -5,7 +5,7 @@ from enum import Enum
 
 from ModelManager import config_loader
 from Logger import setup_logger
-from utils import construct_image_tag
+from utils import construct_image_ref
 
 
 class JobStatus(Enum):
@@ -69,8 +69,8 @@ class JobContext:
         self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
 
     @property
-    def image_tag(self):
-        return construct_image_tag(self.contract)
+    def image_ref(self):
+        return construct_image_ref(self.contract)
 
     def _get_query_path(self):
         query_path = os.environ.get("MELD_QUERY_PATH")

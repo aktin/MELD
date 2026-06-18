@@ -108,7 +108,7 @@ def ensure_image_exists(job_context: JobContext) -> None:
     Raises:
     RuntimeError: If the runtime image specified in the job context is not found.
     """
-    image = job_context.image_tag
+    image = job_context.image_ref
     try:
         client.images.get(image)
 

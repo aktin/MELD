@@ -152,7 +152,7 @@ def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
     Exception: If an error occurs during any part of the inference process.
     """
     job_context.log_event("Running inference", JobStatus.RUNNING)
-    image = job_context.image_tag
+    image = job_context.image_ref
     output_tar_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
     runtime_container = None
     try:

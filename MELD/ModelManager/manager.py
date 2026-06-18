@@ -12,7 +12,7 @@ from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_ima
 from ModelEnvironment.job_context import create_job_context, JobStatus
 from ModelManager import load_contract
 from Logger import setup_logger
-from utils import construct_image_tag, safe_filename_from_url, download_file
+from utils import construct_image_ref, safe_filename_from_url, download_file
 
 logger = setup_logger("meld")
 
@@ -179,7 +179,7 @@ def pull_runtime(contract_path):
         pulling process.
     """
     try:
-        image = construct_image_tag(load_contract(contract_path))
+        image = construct_image_ref(load_contract(contract_path))
         pull_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime pull: {e}")
@@ -197,7 +197,7 @@ def remove_runtime(contract_path):
         deletion, it is caught and logged.
     """
     try:
-        image = construct_image_tag(load_contract(contract_path))
+        image = construct_image_ref(load_contract(contract_path))
         delete_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime removal: {e}")

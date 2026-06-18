@@ -37,19 +37,19 @@ def load_yaml(path: str) -> dict:
     return contract
 
 
-def construct_image_tag(contract: dict) -> str:
+def construct_image_ref(contract: dict) -> str:
     """
-    Constructs a formatted image tag string based on the provided contract
+    Constructs a formatted image reference string based on the provided contract
     dictionary.
 
     Parameters:
-    contract (dict): Dictionary containing the 'runtime' section with
-    the keys 'image_tag' and 'version'.
+    contract (dict): Dictionary containing the 'runtime.image' section with
+    the keys 'name' and 'name'.
 
     Returns:
-    str: A formatted image tag string in the format "<image_tag>:<version>".
+    str: A formatted image ref string in the format "<name>:<tag>".
     """
-    return f"{contract['runtime']['image_tag']}:{contract['runtime']['version']}"
+    return f"{contract['runtime']["image"]['name']}:{contract['runtime']["image"]['tag']}"
 
 
 def _sanitize_url(url: str) -> str:
