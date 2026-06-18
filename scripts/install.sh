@@ -4,7 +4,7 @@ set -e
 source ./utils.sh
 
 DOCKER_IMAGE="ghcr.io/simhue/meld-orchestrator"
-VERSION="0.1.0-alpha"
+VERSION="0.1.1-alpha"
 
 print_help() {
   cat <<EOF
@@ -18,11 +18,11 @@ EOF
 }
 
 pull_docker_image() {
-  docker pull "$DOCKER_IMAGE:$VERSION"
+  docker compose pull
 }
 
 update_docker_image() {
-  docker pull "$DOCKER_IMAGE:latest"
+  docker compose pull
 }
 
 remove_docker_image() {

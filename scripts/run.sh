@@ -8,8 +8,8 @@ OUTPUT_DIR="./output"
 CONTRACT_FILE=""
 QUERY_FILE=""
 CMD=""
-VERSION="0.1.0-alpha"
-IMAGE_NAME="meld-orchestrator"
+#VERSION="0.1.1-alpha"
+#IMAGE_NAME="meld-orchestrator"
 
 print_help() {
   cat <<EOF
