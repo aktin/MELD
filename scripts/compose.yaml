@@ -9,14 +9,12 @@ services:
       - DB_USER=${DB_USER}
       - DB_SCHEMA=${DB_SCHEMA}
       - DB_PASSWORD_FILE=/run/secrets/postgres_password
-      - MELD_CMD=${MELD_CMD:-run}
     secrets:
       - postgres_password
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./logs:/logs"
       - "./jobs/:/jobs/"
-      - "${MELD_OUTPUT_DIR:-./output}:/output"
       - "${MELD_CONTRACT_FILE:-./contract.yaml}:/resources/contract.yaml:ro"
       - "${MELD_QUERY_FILE:-./query.sql}:/resources/query.sql:ro"
       - "~/.docker:/root/.docker:ro" # for ghcr authentication when logged in on host
