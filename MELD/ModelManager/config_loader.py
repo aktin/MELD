@@ -1,7 +1,7 @@
-from Logger import setup_logger
+from Logger.logger import get_meld_logger
 from utils import load_yaml
 
-logger = setup_logger("meld")
+logger = get_meld_logger()
 
 
 def load_contract(path: str) -> dict:

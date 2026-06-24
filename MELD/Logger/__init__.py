@@ -1,1 +1,1 @@
-from .logger import setup_logger
+from .logger import get_job_logger, get_inference_logger, get_meld_logger

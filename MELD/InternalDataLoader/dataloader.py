@@ -4,11 +4,12 @@ from typing import Iterator
 from sqlalchemy import text
 
 import pandas as pd
-from Logger import setup_logger
 from pandas import DataFrame
+
+from Logger import get_meld_logger
 from .db import engine
 
-logger = setup_logger("meld")
+logger = get_meld_logger()
 
 
 def execute_query(sql: str, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:

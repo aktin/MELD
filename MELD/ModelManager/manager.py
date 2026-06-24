@@ -7,14 +7,14 @@ import isodate
 import ModelEnvironment
 import pandas as pd
 from InternalDataLoader import execute_query
+from Logger.logger import get_meld_logger
 from ModelEnvironment import JobContext
 from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_image_exists
 from ModelEnvironment.job_context import create_job_context, JobStatus
 from ModelManager import load_contract
-from Logger import setup_logger
 from utils import construct_image_ref, safe_filename_from_url, download_file
 
-logger = setup_logger("meld")
+logger = get_meld_logger()
 
 
 def load_query(file_path: str, job_context: JobContext) -> str:

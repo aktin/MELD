@@ -1,13 +1,13 @@
 import os
 import sys
 
-from Logger import setup_logger
+from Logger import get_meld_logger
 from ModelManager import run_inference
 from ModelManager.manager import pull_runtime, remove_runtime
 
 
 if __name__ == "__main__":
-    logger = setup_logger("meld")
+    logger = get_meld_logger()
 
 
     argv = sys.argv[1:]

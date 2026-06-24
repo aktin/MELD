@@ -6,12 +6,13 @@ from docker.errors import APIError, NotFound, ImageNotFound
 from docker.models.containers import Container
 
 import requests
+
+from Logger.logger import get_inference_logger, get_meld_logger
 from ModelEnvironment.job_context import JobStatus, JobContext
-from Logger import setup_logger
 
 client = docker.from_env()
 
-logger = setup_logger("meld")
+logger = get_meld_logger()
 
 
 def stream_container_logs(container: Container, job_context: JobContext) -> None:
@@ -27,7 +28,7 @@ def stream_container_logs(container: Container, job_context: JobContext) -> None
         Exception: If an error occurs while streaming container logs.
     """
     try:
-        container_logger = setup_logger(f"meld.job{job_context.job_id}.inference", logs_path=job_context.logs_path)
+        container_logger = get_inference_logger(job_context.job_id)
         for stdout_chunk, stderr_chunk in container.attach(stdout=True, stderr=True, stream=True, logs=True,
                                                            demux=True):
             if stdout_chunk:

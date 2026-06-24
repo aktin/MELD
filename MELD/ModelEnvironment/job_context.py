@@ -3,8 +3,8 @@ import json
 import os.path
 from enum import Enum
 
+from Logger import get_job_logger
 from ModelManager import config_loader
-from Logger import setup_logger
 from utils import construct_image_ref
 
 
@@ -65,7 +65,7 @@ class JobContext:
         self.logs_path = self._create_log_folder()
         self.query_path = "/resources/query.sql"
 
-        self.logger = setup_logger(f"meld.job{self.job_id}", logs_path=self.logs_path, )
+        self.logger = get_job_logger(self.job_id, self.logs_path)
         self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
 
     @property
@@ -150,4 +150,5 @@ class JobContext:
 
 
 def create_job_context(contract_path: str):
-    return JobContext(contract_path=contract_path)
+    context = JobContext(contract_path=contract_path)
+    return context
