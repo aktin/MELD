@@ -1,23 +1,37 @@
-# Overview
+# How to Build a MELD-Compatible Inference Runtime
 
-The MELD orchestrator is designed to be programming-language- and machine-learning-framework-agnostic. Communication between the orchestrator and the inference runtime is performed exclusively through the directories `/input/` and `/output/`, which form the interface between both components.
+## Prerequisites
 
-The orchestrator is responsible for
+Before you start, make sure you have:
 
-- preparing input data,
-- managing the execution lifecycle,
-- collecting results and logs, and
-- archiving execution artifacts.
+- A trained model artifact
+- Docker installed
+- Access to a container registry
 
-The inference runtime is responsible solely for executing inference. It is contained and its access is limited to the container itself.
+## Project Layout
 
-* * *
-
-# Define the Contract
-
-The contract describes the inference runtime and its input and output schemas.
+Structure your project as follows:
 
 ```
+project/
+├── artifact/
+│   └── model.keras
+├── inference/
+│   ├── inference.py
+│   └── requirements.txt
+├── resources/
+│   ├── contract.yaml
+│   └── query.sql
+└── Dockerfile
+```
+
+---
+
+## Step 1: Write the Model Contract
+
+Create `resources/contract.yaml`. This file tells the orchestrator how to run your runtime and what data to provide.
+
+```yaml
 inference:
   name: "my-inference-runtime"    # descriptive short name
   description: ""                 # human-readable description
@@ -61,77 +75,86 @@ output_schema:
       datatype: "integer"         # reserved for future schema validation
 ```
 
-* * *
+The `temporal_scope` defines the time window for data retrieval. With `type: relative`, the orchestrator calculates:
+- `start = anchor + value` (e.g. anchor minus 1 month)
+- `end = anchor`
 
-# Write the Query
+The feature names in `input_schema.features` must match the column names returned by your SQL query.
 
-A SQL query is required to retrieve data from the AKTIN DWH.
+---
 
-The query must contain the parameters `:start` and `:end`, which define the temporal window used for data extraction.
+## Step 2: Write the SQL Query
 
-Example:
+Create `resources/query.sql`. This query retrieves the data your model needs from the AKTIN DWH.
 
-```
+Requirements:
+- Use PostgreSQL syntax.
+- Include `:start` and `:end` parameters — the orchestrator substitutes the values from `temporal_scope`.
+- Return column names that match the feature names defined in `input_schema.features`.
+
+```sql
 SELECT field AS my-feature
 FROM mytable
 WHERE timestamp BETWEEN :start AND :end;
 ```
 
-The values of `:start` and `:end` are derived from the `temporal_scope` section of the contract.
+---
 
-The query must return a result set whose column names correspond to the feature names defined in `input_schema.features`.
+## Step 3: Implement the Inference Logic
 
-* * *
+When the orchestrator starts your container, it provides:
 
-# Implement the Inference Logic
+- `/input/input.csv` — the SQL query result set
+- `/input/contract.yaml` — your contract file
 
-Before starting the container, the MELD orchestrator copies
+Your inference script must:
 
-- the query result set to `/input/input.csv`, and
-- the contract to `/input/contract.yaml`.
+1. Load `/input/contract.yaml`
+2. Load `/input/input.csv`
+3. Run inference
+4. Write all results to `/output/` (e.g. `/output/output.csv`)
+5. Exit
 
-The inference logic should
+**Exit codes:**
+- `0` — execution succeeded
+- Non-zero — execution failed; the orchestrator records this as a failed run
 
-1.  load `contract.yaml`,
-2.  load `input.csv`,
-3.  perform inference, and
-4.  write predictions to `/output/`.
+Do not write to `/input/`. Do not rely on any state from a previous execution — the container is destroyed after each run.
 
-* * *
+### Example (Python)
 
-# Create the Container Image
+```python
+import yaml
+import pandas as pd
 
-## Folder Structure
+if __name__ == "__main__":
+    with open("/input/contract.yaml") as f:
+        config = yaml.safe_load(f)
 
-The inference runtime image **must** provide the directories
+    df = pd.read_csv("/input/input.csv")
 
-- `/input/`
-- `/output/`
+    # ... run your model ...
 
-These directories form the interface between the orchestrator and the runtime.
-
-## Container Entrypoint
-
-Inference execution is initiated by the MELD orchestrator. Therefore, the inference logic must start automatically when the container is started.
-
-This can be achieved by defining an appropriate `ENTRYPOINT` or `CMD` instruction.
-
-### Example Dockerfile
-
+    result.to_csv("/output/output.csv", index=False)
 ```
+
+---
+
+## Step 4: Write the Dockerfile
+
+Your container must start the inference script automatically when launched. The orchestrator does not call anything inside the container — it only starts it.
+
+```Dockerfile
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.title="MELD runtime image example decision forest"
-LABEL org.opencontainers.image.description="Example runtime inference container for MELD. The included model was trained using artificially synthesized data."
+LABEL org.opencontainers.image.description="Example runtime inference container for MELD."
 LABEL org.opencontainers.image.source="https://github.com/aktin/MELD"
 
 ENV PYTHONUNBUFFERED=1
 ENV TF_CPP_MIN_LOG_LEVEL=3
 ENV CUDA_VISIBLE_DEVICES=""
-
-# Required by the orchestrator
-RUN mkdir -p /input /output
 
 # Model artifact
 COPY ./artifact /artifact
@@ -146,50 +169,61 @@ RUN pip install -r requirements.txt
 ENTRYPOINT ["python", "inference.py"]
 ```
 
-* * *
+Requirements:
+- Define `ENTRYPOINT` or `CMD` so inference starts on container launch.
+- Set `PYTHONUNBUFFERED=1` (or equivalent) to ensure logs are flushed in real time.
+- Do not create `/input/` or `/output/` in the Dockerfile — the orchestrator creates these before the container starts.
 
-# Runtime Lifecycle
+---
 
-For each inference request, the orchestrator performs the following steps:
+## Step 5: Build and Push the Image
 
-1.  Create a new container from the inference runtime image.
-2.  Copy
-    - the query result set to `/input/input.csv`, and
-    - the contract to `/input/contract.yaml`.
-3.  Start the container.
-4.  Wait for the inference logic to complete.
-5.  Copy the contents of `/output/`.
-6.  Archive results, metadata, and logs.
-7.  Destroy the container.
-
-The runtime container is ephemeral and should not assume any persistent state between executions.
-
-* * *
-
-# Logging
-
-The inference runtime should write informational messages to stdout and warnings or errors to stderr.
-
-The MELD orchestrator continuously reads both streams and stores them as execution logs. These logs are included in the execution archive and may be used for debugging, monitoring, and auditing purposes.
-
-Runtime output is treated as diagnostic information only. The runtime should not assume that stdout or stderr messages are interpreted semantically by the orchestrator.
-
-* * *
-
-# Example Project Layout
-
-```
-project/
-├── artifact/
-│   └── model.keras
-├── inference/
-│   ├── inference.py
-│   └── requirements.txt
-├── resources/
-│	├── contract.yaml
-│	└── query.sql
-└── build/
-    └── Dockerfile
+```bash
+docker build -t my-registry/my-org/my-image:0.1.0 .
+docker push my-registry/my-org/my-image:0.1.0
 ```
 
-You can find example projects in [./examples](https://github.com/aktin/MELD/tree/main/examples)
+The `image.name` and `image.tag` in your contract must match the pushed image exactly.
+
+---
+
+## Logging
+
+Write informational messages to `stdout` and errors or warnings to `stderr`. The orchestrator captures both streams continuously and includes them in the execution archive.
+
+```python
+import sys
+
+print("Loading model...")                     # stdout
+print("Error: missing feature", file=sys.stderr)  # stderr
+```
+
+The orchestrator does not interpret log messages semantically — they are diagnostic only.
+
+> **@TODO** Structured log format — not yet defined.
+> **@TODO** Progress reporting — not yet defined.
+
+---
+
+## Model Card
+
+> **WIP** — Model card format not yet defined.
+
+---
+
+## Reference: Orchestrator Lifecycle
+
+For each inference request, the orchestrator:
+
+1. Executes the SQL query against the AKTIN DWH.
+2. Creates a new container from your image.
+3. Creates `/input/` and `/output/` inside the container.
+4. Copies `input.csv` and `contract.yaml` to `/input/`.
+5. Starts the container.
+6. Monitors the container until it terminates.
+7. Reads `/output/` and archives results, logs, and metadata.
+8. Destroys the container.
+
+If the container exits with a non-zero code, the orchestrator records the execution as failed. The contents of `/output/` are still archived for debugging.
+
+> **@TODO** Timeout and cancellation behavior — not yet defined.
