@@ -48,10 +48,11 @@ class JobContext:
         logger (logging.Logger): The logger used for job-related logging.
     """
 
-    def __init__(self, contract_path: str):
+    def __init__(self, contract_path: str, query_path: str):
         self.status = None
         self.container_status = None
 
+        self.query_path = query_path
         self.contract_path = contract_path
         self.contract = config_loader.load_contract(contract_path)
 
@@ -63,19 +64,39 @@ class JobContext:
         self.output_data_path = self._create_output_folder()
         self.status_path = self._create_status_folder()
         self.logs_path = self._create_log_folder()
-        self.query_path = "/resources/query.sql"
 
         self.logger = get_job_logger(self.job_id, self.logs_path)
         self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
+
+    @property
+    def contract_path(self):
+        return self._contract_path
+
+    @contract_path.setter
+    def contract_path(self, value):
+        self._contract_path = value
+        if not os.path.exists(value):
+            raise FileNotFoundError(f"Contract file {value} does not exist")
+
+    @property
+    def query_path(self):
+        return self._query_path
+
+    @query_path.setter
+    def query_path(self, value):
+        self._query_path = value
+        if not os.path.exists(value):
+            raise FileNotFoundError(f"Contract file {value} does not exist")
 
     @property
     def image_ref(self):
         return construct_image_ref(self.contract)
 
     def _get_query_path(self):
-        query_path = os.environ.get("MELD_QUERY_PATH")
+        query_path = os.environ.get("MELD_QUERY_PATH", os.path.join(self._root_path, "resources", "query.sql"))
+
         if not os.path.exists(query_path):
-            raise Exception(f"Query file for job {self.job_id} does not exist")
+            raise FileNotFoundError(f"Query file for job {self.job_id} does not exist")
         return query_path
 
     def _create_input_folder(self):
@@ -84,7 +105,7 @@ class JobContext:
         if not os.path.exists(input_path):
             os.makedirs(input_path)
         else:
-            raise Exception(f"Input folder for job {self.job_id} already exists")
+            raise FileExistsError(f"Input folder for job {self.job_id} already exists")
 
         return input_path
 
@@ -94,17 +115,17 @@ class JobContext:
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         else:
-            raise Exception(f"Output folder for job {self.job_id} already exists")
+            raise FileExistsError(f"Output folder for job {self.job_id} already exists")
 
         return output_path
 
     def _create_job_folder(self):
-        job_folder = os.path.join("/jobs", self.job_id)
+        job_folder = os.path.join(self._root_path, "jobs", self.job_id)
 
         if not os.path.exists(job_folder):
             os.makedirs(job_folder)
         else:
-            raise Exception(f"Job folder for job {self.job_id} already exists")
+            raise FileExistsError(f"Job folder for job {self.job_id} already exists")
 
         return job_folder
 
@@ -123,10 +144,10 @@ class JobContext:
     def log_event(self, message: str, event: JobStatus, **kwargs):
         self.logger.debug(message)
         self.set_status(event)
-        with open(os.path.join(self.status_path, "events.jsonl"), "a") as f:
-            f.write(json.dumps(
-                {"message": message, "event": event.value, "timestamp": datetime.datetime.now().isoformat(), **kwargs},
-                sort_keys=True) + "\n")
+        # with open(os.path.join(self.status_path, "events.jsonl"), "a") as f:
+        #     f.write(json.dumps(
+        #         {"message": message, "event": event.value, "timestamp": datetime.datetime.now().isoformat(), **kwargs},
+        #         sort_keys=True) + "\n")
 
     def _create_status_folder(self):
         status_path = os.path.join(self._job_folder, "status")
@@ -134,7 +155,7 @@ class JobContext:
         if not os.path.exists(status_path):
             os.makedirs(status_path)
         else:
-            raise Exception(f"Status folder for job {self.job_id} already exists")
+            raise FileExistsError(f"Status folder for job {self.job_id} already exists")
 
         return status_path
 
@@ -144,11 +165,23 @@ class JobContext:
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         else:
-            raise Exception(f"Log folder for job {self.job_id} already exists")
+            raise FileExistsError(f"Log folder for job {self.job_id} already exists")
 
         return log_path
 
+    @property
+    def _root_path(self):
+        """
+        Retrieves the root path for the application. If the `MELD_ROOT_DIR` environment
+        variable is not set, it assumes it is running in a Docker container and uses the default value "/".
 
-def create_job_context(contract_path: str):
-    context = JobContext(contract_path=contract_path)
-    return context
+        Returns:
+            str: The root path, either from the `MELD_ROOT_DIR` environment
+            variable or the default value "/".
+        """
+        return os.environ.get("MELD_ROOT_DIR", "/")
+
+    @staticmethod
+    def create_job_context(contract_path: str, query_path: str):
+        context = JobContext(contract_path=contract_path, query_path=query_path)
+        return context

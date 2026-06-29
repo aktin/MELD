@@ -10,7 +10,7 @@ from InternalDataLoader import execute_query
 from Logger.logger import get_meld_logger
 from ModelEnvironment import JobContext
 from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_image_exists
-from ModelEnvironment.job_context import create_job_context, JobStatus
+from ModelEnvironment.job_context import JobStatus
 from ModelManager import load_contract
 from utils import construct_image_ref, safe_filename_from_url, download_file
 
@@ -72,7 +72,7 @@ def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFram
     return data
 
 
-def run_inference(contract_path: str = "contract.yaml") -> None:
+def run_inference(contract_path: str, query_path: str) -> None:
     """
     Run the inference workflow using the given contract file.
 
@@ -87,21 +87,16 @@ def run_inference(contract_path: str = "contract.yaml") -> None:
     Returns:
     None
     """
-    job_context = create_job_context(contract_path)
-    default_path = "/resources/query.sql"
+    job_context = JobContext.create_job_context(contract_path, query_path)
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
 
         ensure_image_exists(job_context)
 
-        target_folder = job_context.input_data_path
-
-        target_file = os.path.join(target_folder, job_context.query_path)
-
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        query = load_query(target_file, job_context)
+        query = load_query(job_context.query_path, job_context)
 
         df = query_data(query, params, job_context)
 
@@ -110,8 +105,7 @@ def run_inference(contract_path: str = "contract.yaml") -> None:
 
         ModelEnvironment.run_inference(x, job_context)
     except Exception as e:
-        logger.exception(f"An exception occurred during inference: {e}")
-
+        job_context.logger.exception(f"An exception occurred during inference: {e}")
 
 # def run_training(contract_path: str, job_context: JobContext) -> str:
 #     """
