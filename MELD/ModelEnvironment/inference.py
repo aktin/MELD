@@ -1,3 +1,4 @@
+import datetime
 import io
 import os
 import tarfile
@@ -12,6 +13,28 @@ from ModelEnvironment.docker_runtime import create_container, start_container, w
     stop_container, destroy_container
 from ModelEnvironment.job_context import JobContext, JobStatus
 
+def create_interface_folders(container: Container) -> None:
+    try:
+        buf = io.BytesIO()
+
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            # /input (read-only permissions: r-xr-xr-x)
+            info = tarfile.TarInfo("input")
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o555
+            tar.addfile(info)
+
+            # /output (read-write for owner)
+            info = tarfile.TarInfo("output")
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o755
+            tar.addfile(info)
+
+        buf.seek(0)
+        container.put_archive("/", buf.read())
+    except Exception as e:
+        error = "Failed to create interface folders"
+        raise RuntimeError(error) from e
 
 def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_context: JobContext) -> None:
     """
@@ -43,8 +66,7 @@ def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_c
 
         container.put_archive("/input", buf.getvalue())
     except APIError as e:
-        error = (f"Failed to copy input data into runtime container"
-                 f"Folders /input and /output must exist in the container and must be empty")
+        error = "Failed to copy input data into runtime container"
         job_context.log_event(error, JobStatus.FAILED, error=str(e))
         raise RuntimeError(error) from e
     except Exception as e:
@@ -158,13 +180,18 @@ def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
     try:
         runtime_container = create_container(image, job_context, )
 
+        create_interface_folders(runtime_container)
+
         copy_data_to_container(runtime_container, input_data, job_context)
 
+        start = datetime.datetime.now()
         start_container(runtime_container, job_context, )
 
         wait_for_container(runtime_container, job_context)
 
         stop_container(runtime_container, job_context)
+        timespan = datetime.datetime.now() - start
+        job_context.logger.info(f"Inference completed in {timespan.total_seconds():.3f} seconds",)
 
         archive_bytes = get_output_data_from_container(runtime_container, job_context)
         pack_result_files(output_tar_path, archive_bytes, job_context)
