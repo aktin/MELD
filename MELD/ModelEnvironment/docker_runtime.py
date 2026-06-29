@@ -246,7 +246,7 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
     """
     try:
         job_context.logger.info(f"Creating runtime container")
-        environment_variables = job_context.contract["runtime"]["environment_variables"]
+        environment_variables = job_context.contract["runtime"].get("environment_variables", {})
         runtime_container = client.containers.create(image,
                                                      environment=environment_variables, )
         job_context.log_event(f"Created runtime container {runtime_container.id}",
