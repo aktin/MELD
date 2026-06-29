@@ -14,6 +14,16 @@ from ModelEnvironment.docker_runtime import create_container, start_container, w
 from ModelEnvironment.job_context import JobContext, JobStatus
 
 def create_interface_folders(container: Container) -> None:
+    """
+    Creates and configures interface folders `/input` and `/output` in the provided container.
+
+    Parameters:
+    container (Container): The container object where the directories are created.
+
+    Raises:
+    RuntimeError: If the creation of the directories encounters any issues, an exception
+    is raised with a descriptive error message.
+    """
     try:
         buf = io.BytesIO()
 
@@ -127,7 +137,7 @@ def pack_metadata_and_logs(output_zip_path: str, job_context: JobContext) -> Non
 
         for path, arcname in (
             (job_context.logs_path, "logs"),
-            (job_context.status_path, "status"),
+            # (job_context.status_path, "status"),
         ):
             if os.path.isdir(path):
                 for root, _, files in os.walk(path):
