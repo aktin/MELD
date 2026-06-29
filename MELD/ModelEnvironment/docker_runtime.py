@@ -42,7 +42,7 @@ def stream_container_logs(container: Container, job_context: JobContext) -> None
             sys.stdout.flush()
             sys.stderr.flush()
     except Exception:
-        logger.exception("Error while streaming container logs")
+        job_context.logger.exception("Error while streaming container logs")
 
 
 def pull_image(image: str, ) -> None:
@@ -64,11 +64,11 @@ def pull_image(image: str, ) -> None:
         logger.info(f"Pulled runtime image {image}")
     except NotFound as e:
         error = f"Runtime image {image} not found"
-        logger.exception(error)
+        # logger.exception(error)
         raise RuntimeError(error)
     except APIError as e:
         error = f"Failed to pull image {image}"
-        logger.exception(error)
+        # logger.exception(error)
         raise RuntimeError(error) from e
 
 
@@ -89,11 +89,11 @@ def delete_image(image: str, ) -> None:
         logger.info(f"Deleted runtime image {image}")
     except NotFound as e:
         error = f"Runtime image {image} not found"
-        logger.exception(error)
+        # logger.exception(error)
         raise RuntimeError(error)
     except APIError as e:
         error = f"Failed to delete image {image}"
-        logger.exception(error)
+        # logger.exception(error)
         raise RuntimeError(error) from e
 
 
@@ -119,7 +119,7 @@ def ensure_image_exists(job_context: JobContext) -> None:
             image=image,
         )
     except ImageNotFound as e:
-        error = f"Runtime image {image} not found"
+        error = f"Runtime image {image} not found. Make sure to pull the image first."
         job_context.log_event(error, JobStatus.FAILED, image=image)
         raise RuntimeError(error) from e
 
@@ -262,7 +262,3 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         error = f"Failed to create image {image}"
         job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
         raise RuntimeError(error) from e
-
-
-def login():
-    client.login()
