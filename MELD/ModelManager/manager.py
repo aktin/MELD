@@ -67,8 +67,8 @@ def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFram
     job_context.logger.info(f"Executing query")
     start = datetime.now()
     data = execute_query(query, params)
-    end = datetime.now()
-    job_context.logger.info(f"Query returned {len(data)} rows and took {end - start} seconds.")
+    timespan = datetime.now() - start
+    job_context.logger.info(f"Query returned {len(data)} rows and took {timespan.total_seconds():.3f} seconds.")
     return data
 
 
