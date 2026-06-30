@@ -1,0 +1,36 @@
+contract:
+  name: "stationary-admission-test-sklearn"
+  version: "0.1.0"
+
+runtime:
+  framework: "scikit-learn"
+  image:
+    name: "ghcr.io/simhue/meld/runtime_examples/sklearn"
+    tag: "0.1.0"
+    digest: "sha256:"
+
+input_schema:
+  temporal_scope:
+    type: "relative" # relative | absolute
+    value: "-P1M" # ISO 8601 duration
+    anchor: "2026-04-23T13:56:55.525240" # the anchor date for relative temporal scope
+
+  features:
+    - name: "cedis_code"
+      datatype: "string"
+    - name: "age"
+      datatype: "string"
+    - name: "admission_time"
+      datatype: "datetime"
+    - name: "triage_score"
+      datatype: "integer"
+
+  query:
+    type: "sql"
+    digest: "sha256:d1a7f2c577602fb47d78c25483559c2495691737fec9cb2d6aa106b2229e6537"
+
+output_schema:
+  format: "csv"
+  predictor:
+    - name: "admitted"
+      datatype: "integer"
