@@ -48,11 +48,10 @@ class JobContext:
         logger (logging.Logger): The logger used for job-related logging.
     """
 
-    def __init__(self, contract_path: str, query_path: str):
+    def __init__(self, contract_path: str):
         self.status = None
         self.container_status = None
 
-        self.query_path = query_path
         self.contract_path = contract_path
         self.contract = config_loader.load_contract(contract_path)
 
@@ -75,16 +74,6 @@ class JobContext:
     @contract_path.setter
     def contract_path(self, value):
         self._contract_path = value
-        if not os.path.exists(value):
-            raise FileNotFoundError(f"Contract file {value} does not exist")
-
-    @property
-    def query_path(self):
-        return self._query_path
-
-    @query_path.setter
-    def query_path(self, value):
-        self._query_path = value
         if not os.path.exists(value):
             raise FileNotFoundError(f"Contract file {value} does not exist")
 
@@ -182,6 +171,6 @@ class JobContext:
         return os.environ.get("MELD_ROOT_DIR", "/")
 
     @staticmethod
-    def create_job_context(contract_path: str, query_path: str):
-        context = JobContext(contract_path=contract_path, query_path=query_path)
+    def create_job_context(contract_path: str):
+        context = JobContext(contract_path=contract_path)
         return context

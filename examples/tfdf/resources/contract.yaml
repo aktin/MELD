@@ -1,12 +1,13 @@
 contract:
   name: "stationary-admission-test-tfdf"
+  description: "stationary-admission-test-tfdf"
   version: "0.1.0"
 
 runtime:
   framework: "tensorflow-tfdf"
   image:
     name: "ghcr.io/simhue/meld/runtime_examples/tfdf"
-    tag: "0.1.0"
+    tag: "0.1.1-SNAPSHOT"
     digest: "sha256:d7a0d999b4647543f72ceab7d07a2cd09e7c07ef497a4bb1aa3a765ebac36a9e"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
@@ -29,7 +30,253 @@ input_schema:
 
   query:
     type: "sql"
-    digest: "sha256:d1a7f2c577602fb47d78c25483559c2495691737fec9cb2d6aa106b2229e6537"
+    statement: |
+
+      DROP TABLE IF EXISTS temp_encounter_data;
+      DROP TABLE IF EXISTS temp_joindata;
+      DROP TABLE IF EXISTS temp_diagnoses;
+      --preprocessing of rawdata
+      CREATE TEMPORARY TABLE temp_joindata AS
+      
+      --SELECT BASIC INFORMATION
+      SELECT DISTINCT obs.encounter_num,
+                      obs.patient_num,
+                      EXTRACT(years FROM age(vis_dim.start_date, pat_dim.birth_date)) AS age_in_years,
+                      pat_dim.sex_cd                                                  as gender,
+                      vis_dim.start_date                                              AS admission_date,
+                      vis_dim.end_date                                                AS discharge_date
+      FROM i2b2crcdata.observation_fact obs
+               JOIN i2b2crcdata.patient_dimension pat_dim ON (obs.patient_num = pat_dim.patient_num)
+               JOIN i2b2crcdata.visit_dimension vis_dim ON (obs.encounter_num = vis_dim.encounter_num)
+      
+      -- Column Zeitfilter
+      WHERE vis_dim.start_date BETWEEN :start AND :end;
+      -- End Column Zeitfilter
+      
+      
+      -- ### Table 1 : Encounter data (without diagnoses) ###
+      -- Fallnummer
+      
+      -- Aufnahmedatum
+      -- Zeitpunkt der Verlegung/Entlassung (jjjj-mm-dd hh:mm:ss)
+      -- Alter in Jahren/Monaten
+      -- Geschlecht
+      
+      CREATE TEMPORARY TABLE temp_encounter_data AS
+      SELECT DISTINCT
+      
+      -- Column Alter_Jahre
+      age_in_years,
+      -- End Column Alter_Jahre
+      -- Column Geschlecht
+      gender as geschlecht,
+      -- End Column Geschlecht
+      -- Column Aufnahmedatum
+      admission_date as aufnahme_ts,
+      -- End Column Aufnahmedatum
+      -- Column Verlegung/Entlassung
+      discharge_date as entlassung_ts,
+      -- End Column Verlegung/Entlassung
+      -- Column patienten_nummer
+      patient_num,
+      -- End Column patienten_nummer
+      encounter_num
+      FROM temp_joindata
+      -- Sort table by encounter_num in ascending order
+      ORDER BY encounter_num ASC;
+      
+      
+      -- Column Altersgruppen
+      ALTER TABLE temp_encounter_data ADD COLUMN altersgruppe VARCHAR;
+      UPDATE temp_encounter_data SET altersgruppe =
+      CASE
+      WHEN age_in_years >=0 AND age_in_years < 6 THEN '0-6'
+      WHEN age_in_years >=7 AND age_in_years < 11 THEN '7-10'
+      WHEN age_in_years >=11 AND age_in_years < 14 THEN '11-13'
+      WHEN age_in_years >=14 AND age_in_years < 18 THEN '14-17'
+      WHEN age_in_years >=18 AND age_in_years < 25 THEN '18-24'
+      WHEN age_in_years >=25 AND age_in_years < 30 THEN '25-29'
+      WHEN age_in_years >=30 AND age_in_years < 35 THEN '30-34'
+      WHEN age_in_years >=35 AND age_in_years < 40 THEN '35-39'
+      WHEN age_in_years >=40 AND age_in_years < 45 THEN '40-44'
+      WHEN age_in_years >=45 AND age_in_years < 50 THEN '45-49'
+      WHEN age_in_years >=50 AND age_in_years < 55 THEN '50-54'
+      WHEN age_in_years >=55 AND age_in_years < 60 THEN '55-59'
+      WHEN age_in_years >=60 AND age_in_years < 65 THEN '60-64'
+      WHEN age_in_years >=65 AND age_in_years < 70 THEN '65-69'
+      WHEN age_in_years >=70 AND age_in_years < 75 THEN '70-74'
+      WHEN age_in_years >=75 AND age_in_years < 80 THEN '75-79'
+      WHEN age_in_years >=80 AND age_in_years < 85 THEN '80-84'
+      WHEN age_in_years >=85 AND age_in_years < 90 THEN '85-89'
+      WHEN age_in_years >=90 AND age_in_years < 95 THEN '90-94'
+      WHEN age_in_years >=95 AND age_in_years < 100 THEN '95-99'
+      WHEN age_in_years >=100 THEN '100+'
+      ELSE age_in_years::text
+      END;
+      ALTER TABLE temp_encounter_data DROP COLUMN age_in_years;
+      -- End Column Altersgruppen
+      
+      -- Column PLZ
+      ALTER TABLE temp_encounter_data ADD COLUMN plz VARCHAR;
+      UPDATE temp_encounter_data SET plz = i2b2crcdata.observation_fact.tval_char
+      FROM i2b2crcdata.observation_fact
+      WHERE i2b2crcdata.observation_fact.concept_cd = 'AKTIN:ZIPCODE' AND provider_id = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column PLZ
+      
+      -- Column PLZ_kurz
+      ALTER TABLE temp_encounter_data ADD COLUMN plz_kurz VARCHAR;
+      UPDATE temp_encounter_data SET plz_kurz = SUBSTR(i2b2crcdata.observation_fact.tval_char,1,3)
+      FROM i2b2crcdata.observation_fact
+      WHERE i2b2crcdata.observation_fact.concept_cd = 'AKTIN:ZIPCODE' AND provider_id = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column PLZ_kurz
+      
+      
+      -- Column Vorstellungsgrund_cedis
+      ALTER TABLE temp_encounter_data ADD COLUMN cedis VARCHAR;
+      UPDATE temp_encounter_data SET cedis = CASE
+          WHEN concept_cd = '75322-8:UNK' THEN '999'
+          WHEN concept_cd = 'CEDIS30:UNK' THEN '999'
+          WHEN concept_cd LIKE '75322-8%' THEN substr(concept_cd, 8)
+          WHEN concept_cd LIKE 'CEDIS%' THEN substr(concept_cd, 9)
+          ELSE
+              concept_cd
+          END
+      FROM i2b2crcdata.observation_fact
+      WHERE (concept_cd LIKE 'CEDIS%' OR concept_cd LIKE '75322-8%') AND modifier_cd = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column Vorstellungsgrund_cedis
+      
+      -- Column Beschwerden_CEDIS_text
+      ALTER TABLE temp_encounter_data ADD COLUMN cedis_text VARCHAR;
+      UPDATE temp_encounter_data SET cedis_text = i2b2crcdata.observation_fact.tval_char
+      FROM i2b2crcdata.observation_fact
+      WHERE concept_cd = 'AKTIN:COMPLAINT' AND modifier_cd = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column Beschwerden_CEDIS_text
+      
+      -- Column Symptom_Dauer
+      ALTER TABLE temp_encounter_data ADD COLUMN symptom_dauer DECIMAL;
+      UPDATE temp_encounter_data SET symptom_dauer = nval_num
+      FROM i2b2crcdata.observation_fact
+      WHERE concept_cd = 'AKTIN:SYMPTOMDURATION' AND modifier_cd = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column Symptom_Dauer
+      
+      -- Column Ersteinschätzung_triage
+      ALTER TABLE temp_encounter_data ADD COLUMN triage VARCHAR;
+      UPDATE temp_encounter_data SET triage = CASE
+          WHEN concept_cd LIKE 'MTS:%' THEN substr(concept_cd, 5)
+          WHEN concept_cd LIKE 'ESI:%' THEN substr(concept_cd, 5)
+          WHEN concept_cd LIKE 'AKTIN:ASSESSMENT%' THEN substr(concept_cd, 18)
+          ELSE
+              concept_cd
+          END
+      FROM i2b2crcdata.observation_fact
+      WHERE (concept_cd LIKE 'MTS%' OR concept_cd LIKE 'ESI%' OR concept_cd LIKE 'AKTIN:ASSESSMENT%') AND modifier_cd = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column Ersteinschätzung_triage
+      
+      -- Column Triagesystem
+      ALTER TABLE temp_encounter_data ADD COLUMN triagesystem VARCHAR;
+      UPDATE temp_encounter_data SET triagesystem = CASE
+          WHEN concept_cd LIKE 'MTS:%' THEN 'MTS'
+          WHEN concept_cd LIKE 'ESI:%' THEN 'ESI'
+          WHEN concept_cd LIKE 'AKTIN:ASSESSMENT' THEN 'Anderes'
+          ELSE
+              concept_cd
+          END
+      FROM i2b2crcdata.observation_fact
+      WHERE (concept_cd LIKE 'MTS%' OR concept_cd LIKE 'ESI%' OR concept_cd LIKE 'AKTIN:ASSESSMENT%') AND modifier_cd = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column Triagesystem
+      
+      
+      
+      -- Column verbleib
+      ALTER TABLE temp_encounter_data ADD COLUMN verbleib VARCHAR;
+      UPDATE temp_encounter_data SET verbleib  = CASE
+          WHEN concept_cd = 'AKTIN:TRANSFER:1' THEN 'Aufnahme in Funktionsbereich'
+          WHEN concept_cd = 'AKTIN:TRANSFER:2' THEN 'Verlegung extern in Funktionsbereich'
+          WHEN concept_cd = 'AKTIN:TRANSFER:3' THEN 'Aufnahme auf Ueberwachungsstation'
+          WHEN concept_cd = 'AKTIN:TRANSFER:4' THEN 'Verlegung extern auf Ueberwachungsstation'
+          WHEN concept_cd = 'AKTIN:TRANSFER:5' THEN 'Aufnahme auf Normalstation'
+          WHEN concept_cd = 'AKTIN:TRANSFER:6' THEN 'Verlegung extern auf Normalstation'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:1' THEN 'Tod'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:2' THEN 'Entlassung gegen aerztlichen Rat'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:3' THEN 'Behandlung durch Pat. abgebrochen'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:4' THEN 'Entlassung nach Hause'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:5' THEN 'Entlassung zu weiterbehandelnden Arzt'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:6' THEN 'kein Arztkontakt'
+          WHEN concept_cd = 'AKTIN:DISCHARGE:OTH' THEN 'Sonstige Entlassung'
+          ELSE
+              concept_cd
+          END
+      FROM i2b2crcdata.observation_fact
+      WHERE ((concept_cd LIKE '%TRANSFER%' AND concept_cd <> 'AKTIN:TRANSFER:ZeitpunktVerlegung') OR concept_cd LIKE '%DISCHARGE%') AND modifier_cd = '@'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column verbleib
+      
+      -- Column triage_ts
+      ALTER TABLE temp_encounter_data ADD COLUMN triage_ts TIMESTAMP;
+      UPDATE temp_encounter_data SET triage_ts = start_date
+      FROM i2b2crcdata.observation_fact
+      WHERE (concept_cd LIKE 'MTS%' OR concept_cd LIKE 'ESI%' OR concept_cd LIKE 'AKTIN:ASSESSMENT') AND modifier_cd = 'effectiveTimeLow'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_encounter_data.encounter_num;
+      -- End Column triage_ts
+      
+      
+      
+      -- Column aktin_diagnose_table
+      -- ### Table 2 : Patient diagnoses (Datensatz Notaufnahme) ###
+      CREATE TEMPORARY TABLE temp_diagnoses AS
+      SELECT DISTINCT
+      temp_joindata.encounter_num,
+      instance_num,
+      substr(i2b2crcdata.observation_fact.concept_cd, 9) as icd_code
+      FROM temp_joindata
+      INNER JOIN i2b2crcdata.observation_fact
+      ON temp_joindata.encounter_num = i2b2crcdata.observation_fact.encounter_num
+      WHERE i2b2crcdata.observation_fact.concept_cd LIKE 'ICD10GM:%' AND i2b2crcdata.observation_fact.provider_id = '@' and i2b2crcdata.observation_fact.modifier_cd = '@';
+      
+      
+      -- Markierung der führenden Notaufnahmediagnose
+      ALTER TABLE temp_diagnoses ADD COLUMN diagnose_fuehrend VARCHAR;
+      UPDATE temp_diagnoses SET diagnose_fuehrend = 'f'
+      FROM i2b2crcdata.observation_fact
+      WHERE concept_cd LIKE 'ICD10GM:%' AND provider_id = '@' AND modifier_cd = 'AKTIN:DIAG:F'
+      AND i2b2crcdata.observation_fact.encounter_num = temp_diagnoses.encounter_num
+      AND i2b2crcdata.observation_fact.instance_num = temp_diagnoses.instance_num
+      AND substr(i2b2crcdata.observation_fact.concept_cd, 9) = temp_diagnoses.icd_code;
+      
+      
+      -- Zusatzkennzeichen (zur Diagnosesicherheit)
+      ALTER TABLE temp_diagnoses ADD COLUMN diagnose_zusatz VARCHAR;
+      UPDATE temp_diagnoses SET diagnose_zusatz = substr(modifier_cd, 12)
+      FROM i2b2crcdata.observation_fact
+      WHERE concept_cd LIKE 'ICD10GM:%'
+      AND provider_id = '@'
+      AND (modifier_cd LIKE 'AKTIN:DIAG:%' AND modifier_cd NOT LIKE 'AKTIN:DIAG:F')
+      AND i2b2crcdata.observation_fact.encounter_num = temp_diagnoses.encounter_num
+      AND i2b2crcdata.observation_fact.instance_num = temp_diagnoses.instance_num
+      AND substr(i2b2crcdata.observation_fact.concept_cd, 9) = temp_diagnoses.icd_code;
+      
+      --delete empty cases and instance_num
+      ALTER TABLE temp_diagnoses DROP COLUMN instance_num;
+      DELETE FROM temp_diagnoses WHERE icd_code is NULL;
+      -- End Column aktin_diagnose_table
+      
+      
+      SELECT temp_encounter_data.altersgruppe                                            as age,
+             temp_encounter_data.triage                                                  as triage_score,
+             aufnahme_ts                                                                 as admission_time,
+             temp_encounter_data.cedis                                                   as cedis_code,
+             temp_encounter_data.verbleib,
+             (case when temp_encounter_data.verbleib like 'Aufnahme%' then 1 else 0 end) as admitted
+      FROM temp_encounter_data;
+
+
 
 output_schema:
   format: "csv"

@@ -19,10 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     cmd = argv[0]
 
     contract_path = os.environ.get("MELD_CONTRACT_FILE", "/resources/contract.yaml")
-    query_path = os.environ.get("MELD_QUERY_FILE", "/resources/query.sql")
 
     if cmd == "run":
-        run_inference(contract_path=contract_path, query_path=query_path)
+        run_inference(contract_path=contract_path)
     elif cmd == "pull":
         pull_runtime(contract_path=contract_path)
     elif cmd == "delete":

@@ -72,7 +72,7 @@ def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFram
     return data
 
 
-def run_inference(contract_path: str, query_path: str) -> None:
+def run_inference(contract_path: str) -> None:
     """
     Run the inference workflow using the given contract file.
 
@@ -87,7 +87,7 @@ def run_inference(contract_path: str, query_path: str) -> None:
     Returns:
     None
     """
-    job_context = JobContext.create_job_context(contract_path, query_path)
+    job_context = JobContext.create_job_context(contract_path)
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
 
@@ -96,7 +96,7 @@ def run_inference(contract_path: str, query_path: str) -> None:
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        query = load_query(job_context.query_path, job_context)
+        query = job_context.contract["input_schema"]["query"]["statement"]
 
         df = query_data(query, params, job_context)
 
@@ -152,9 +152,12 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     anchor = scope.get("anchor")
     duration = scope.get("value")
 
+    # force absolute value duration gets subtracted from anchor, negative values would add to anchor and cause that start > end
+    duration = duration[1:] if duration.startswith("-") else duration
+
     end = datetime.fromisoformat(anchor) if anchor else datetime.now()
     td: timedelta = isodate.parse_duration(duration, as_timedelta_if_possible=False).totimedelta(end=end)
-    start = end + td
+    start = end - td
     job_context.logger.info(f"Temporal window start: {start.isoformat()}, end: {end.isoformat()}")
     return start, end
 
