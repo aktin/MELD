@@ -1,6 +1,6 @@
 services:
   meld:
-    image: ghcr.io/simhue/meld-orchestrator:0.2.0-alpha
+    image: ghcr.io/simhue/meld-orchestrator:0.2.1-SNAPSHOT
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -13,7 +13,7 @@ services:
       - postgres_password
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./logs:/logs"
+      - "${MELD_LOG_DIR:-./logs}:/logs"
       - "./jobs/:/jobs/"
       - "${MELD_CONTRACT_FILE:-./contract.yaml}:/resources/contract.yaml:ro"
       - "${MELD_QUERY_FILE:-./query.sql}:/resources/query.sql:ro"
