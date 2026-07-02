@@ -27,7 +27,7 @@ project/
 
 ## Step 1: Write the Model Contract
 
-Create `resources/contract.yaml`. This file tells the orchestrator how to run your runtime and what data to provide. See [the reference](reference.md#contract-file) for details.
+Create `resources/contract.yaml`. This file tells the orchestrator how to run your runtime and what data to provide. See [the reference](https://github.com/aktin/MELD/blob/main/docs/contract_reference.md) for details.
 
 ```yaml
 contract:
@@ -144,8 +144,6 @@ Your inference script must:
 
 Do not write to `/input/`. Do not rely on any state from a previous execution — the container is destroyed after each run.
 
-### Example (Python)
-
 ```python
 import yaml
 import pandas as pd
@@ -169,8 +167,6 @@ Requirements:
 - Define `ENTRYPOINT` or `CMD` so inference starts on container launch.
 - Set `PYTHONUNBUFFERED=1` (or equivalent) to ensure logs are flushed in real time.
 - Do not create `/input/` or `/output/` in the Dockerfile — the orchestrator creates these before the container starts.
-
-### Example
 
 ```Dockerfile
 FROM python:3.12-slim
@@ -212,7 +208,6 @@ Write informational messages to `stdout` and errors or warnings to `stderr`. The
 
 The orchestrator does not interpret log messages semantically — they are diagnostic only.
 
-### Example    
 ```python
 import sys
 
