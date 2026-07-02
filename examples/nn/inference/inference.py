@@ -8,16 +8,16 @@ from pandas import DataFrame
 def _cast_series_for_model(series: pd.Series, spec: dict) -> tf.Tensor:
     expected_type = spec["datatype"].lower()
 
-    if expected_type in ("float", "datetime"):
+    if expected_type.startswith(("float", "datetime")):
         # Preserve numeric meaning, but cast to the model's expected floating type
         return tf.convert_to_tensor(pd.to_numeric(series, errors="coerce").to_numpy(), dtype=tf.float32)
 
-    if expected_type == "integer":
+    if expected_type.startswith("int"):
         # Use pandas nullable integers first to preserve missing values semantics
         values = pd.to_numeric(series, errors="coerce").astype("Int64")
         return tf.convert_to_tensor(values.to_numpy(dtype="int64", na_value=0), dtype=tf.int64)
 
-    if expected_type == "bool":
+    if expected_type == "boolean":
         return tf.convert_to_tensor(series.astype("boolean").fillna(False).to_numpy(), dtype=tf.bool)
 
     # Default: treat as string/categorical-like

@@ -24,9 +24,9 @@ input_schema:
     - name: "age"
       datatype: "string"
     - name: "admission_time"
-      datatype: "datetime"
+      datatype: "datetime64[ns]"
     - name: "triage_score"
-      datatype: "integer"
+      datatype: "Int64"
 
   query:
     type: "sql"
@@ -282,5 +282,5 @@ output_schema:
   format: "csv"
   predictor:
     - name: "admitted"
-      datatype: "integer"
+      datatype: "Int64"
 

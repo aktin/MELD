@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aktin.org/schema/meld/contract.schema.json",
+  "title": "MELD Inference Runtime Contract",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "contract": {
+      "description": "Inference runtime metadata",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Comprehensive descriptive name of the inference runtime",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description of the inference runtime",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version of the inference runtime",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "version"
+      ]
+    },
+    "runtime": {
+      "description": "Inference runtime configuration",
+      "type": "object",
+      "properties": {
+        "framework": {
+          "description": "Framework of the inference runtime",
+          "type": "string"
+        },
+        "image": {
+          "description": "Docker image of the inference runtime",
+          "type": "object",
+          "properties": {
+            "name": {
+              "description": "Docker image repository",
+              "type": "string"
+            },
+            "tag": {
+              "description": "Docker image tag",
+              "type": "string"
+            },
+            "digest": {
+              "description": "Docker image digest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "tag",
+            "digest"
+          ]
+        },
+        "environment_variables": {
+          "description": "Environment variables to be set in the inference runtime",
+          "type": "object"
+        }
+      },
+      "required": [
+        "framework",
+        "image"
+      ]
+    },
+    "input_schema": {
+      "description": "Input schema of the inference runtime",
+      "type": "object",
+      "properties": {
+        "temporal_scope": {
+          "description": "Temporal scope of the input schema",
+          "type": "object",
+          "properties": {
+            "type": {
+              "description": "Type of scope, only relative scopes are supported at the moment",
+              "type": "string",
+              "enum": [
+                "relative",
+                "absolute"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "relative"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "value": {
+                    "description": "Value of the relative scope, must be ISO-8601 duration format. Absolute value will be subtracted from anchor. E.g. P1Y2M3DT4H5M6S for 1 year, 2 months, 3 days, 4 hours, 5 minutes, 6 seconds.",
+                    "type": "string",
+                    "format": "duration",
+                    "examples": [
+                      "P1Y2M3DT4H5M6S"
+                    ]
+                  },
+                  "anchor": {
+                    "description": "Anchor of the relative scope, must be ISO-8601 date-time format",
+                    "type": "string",
+                    "format": "date-time",
+                    "examples": [
+                      "2000-01-01T00:00:00Z",
+                      "1970-01-01T00:00:00Z",
+                      "9999-12-31T23:59:59Z",
+                      "1985-04-12T23:20:50.52Z",
+                      "1996-12-19T16:39:57-08:00",
+                      "1953-01-01T12:00:27.87+00:20"
+                    ]
+                  }
+                },
+                "required": [
+                  "value",
+                  "anchor"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "absolute"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ]
+              }
+            }
+          ]
+        },
+        "features": {
+          "description": "Input features of the inference runtime model",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/feature"
+          }
+        },
+        "query": {
+          "description": "Query for the inference runtime model",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "sql"
+              ]
+            },
+            "statement": {
+              "description": "Statement to be executed against the Aktin DWH",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "statement"
+          ]
+        }
+      }
+    },
+    "output_schema": {
+      "description": "Output schema of the inference runtime",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "File type of the result file, currently only CSV supported, might be subject to change",
+          "type": "string",
+          "enum": [
+            "csv"
+          ]
+        },
+        "predictor": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/feature"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "contract",
+    "runtime",
+    "input_schema",
+    "output_schema"
+  ],
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "datatype": {
+          "description": "Reserved for future use, and might be subject to change",
+          "type": "string",
+          "enum": [
+            "Int64",
+            "Float64",
+            "boolean",
+            "string",
+            "datetime64[ns]",
+            "timedelta64[ns]",
+            "category",
+            "object"
+          ]
+        },
+        "required": {
+          "description": "Currently unused",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "datatype"
+      ]
+    }
+  }
+}

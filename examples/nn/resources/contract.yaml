@@ -7,7 +7,7 @@ runtime:
   framework: "tensorflow"
   image:
     name: "ghcr.io/simhue/meld/runtime_examples/nn"
-    tag: "0.2.0"
+    tag: "0.2.1-SNAPSHOT"
     digest: "sha256:af99356afc28955895878fea10db2c8aeb4917e178de76c301d1c15393982939"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
@@ -24,9 +24,9 @@ input_schema:
     - name: "age"
       datatype: "string"
     - name: "admission_time"
-      datatype: "datetime"
+      datatype: "datetime64[ns]"
     - name: "triage_score"
-      datatype: "integer"
+      datatype: "Int64"
 
   query:
     type: "sql"
@@ -282,5 +282,5 @@ output_schema:
   format: "csv"
   predictor:
     - name: "admitted"
-      datatype: "integer"
+      datatype: "Int64"
 

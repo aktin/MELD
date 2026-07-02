@@ -1,3 +1,8 @@
+import json
+import os.path
+
+from jsonschema import validate
+
 from Logger.logger import get_meld_logger
 from utils import load_yaml
 
@@ -13,5 +18,15 @@ def load_contract(path: str) -> dict:
     :return: The contract data loaded from the specified YAML file.
     :rtype: Any
     """
-    logger.info(f"Loading contract from {path}")
-    return load_yaml(path)
+    logger.debug(f"Loading contract from {path}")
+    contract = load_yaml(path)
+
+    _validate_contract(contract)
+
+    return contract
+
+def _validate_contract(contract: dict):
+    with open(os.path.join(os.path.dirname(__file__), "contract.schema.json"), "r") as f:
+        schema = json.load(f)
+
+    validate(contract, schema)

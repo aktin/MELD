@@ -12,6 +12,9 @@ runtime:
 
 input_schema:
   temporal_scope:
+#    type: "absolute"
+#    start: "2026-03-23T13:56:55.525240"
+#    end: "2026-04-23T13:56:55.525240"
     type: "relative"
     value: "-P1M" # ISO 8601 duration
     anchor: "2026-04-23T13:56:55.525240" # the anchor date for relative temporal scope
@@ -22,9 +25,9 @@ input_schema:
     - name: "age"
       datatype: "string"
     - name: "admission_time"
-      datatype: "datetime"
+      datatype: "datetime64[ns]"
     - name: "triage_score"
-      datatype: "integer"
+      datatype: "Int64"
 
   query:
     type: "sql"
@@ -279,4 +282,4 @@ output_schema:
   format: "csv"
   predictor:
     - name: "admitted"
-      datatype: "integer"
+      datatype: "Int64"
