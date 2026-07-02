@@ -149,15 +149,24 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
         objects representing the temporal window.
     """
     scope = job_context.contract["input_schema"]["temporal_scope"]
-    anchor = scope.get("anchor")
-    duration = scope.get("value")
+    if scope["type"] == "absolute":
+        start = datetime.fromisoformat(scope["start"])
+        end = datetime.fromisoformat(scope["end"])
+    else:
+        anchor = scope.get("anchor")
+        duration = scope.get("value")
 
-    # force absolute value duration gets subtracted from anchor, negative values would add to anchor and cause that start > end
-    duration = duration[1:] if duration.startswith("-") else duration
+        # force absolute value duration gets subtracted from anchor, negative values would add to anchor and cause that start > end
+        duration = duration[1:] if duration.startswith("-") else duration
 
-    end = datetime.fromisoformat(anchor) if anchor else datetime.now()
-    td: timedelta = isodate.parse_duration(duration, as_timedelta_if_possible=False).totimedelta(end=end)
-    start = end - td
+        end = datetime.fromisoformat(anchor) if anchor else datetime.now()
+        td: timedelta = isodate.parse_duration(duration, as_timedelta_if_possible=False).totimedelta(end=end)
+
+        start = end - td
+
+    if start >= end:
+        raise ValueError("Start time must be before end time")
+
     job_context.logger.info(f"Temporal window start: {start.isoformat()}, end: {end.isoformat()}")
     return start, end
 
