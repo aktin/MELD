@@ -107,34 +107,6 @@ def run_inference(contract_path: str) -> None:
     except Exception as e:
         job_context.logger.exception(f"An exception occurred during inference: {e}")
 
-# def run_training(contract_path: str, job_context: JobContext) -> str:
-#     """
-#     !!! Reine Testfunktion !!!
-#
-#     Runs the training pipeline, loading configuration and processing data
-#     before invoking the model training.
-#
-#     :param contract_path: Path to the directory containing the contract
-#         and related configuration files. Defaults to "artifact_df".
-#     :type contract_path: str
-#     :return: Path to the directory containing the artifacts of the training
-#         process.
-#     :rtype: str
-#     """
-#     config = load_contract(contract_path)
-#
-#     start, end = _compute_time_window(job_context)
-#     params = {"start": start.isoformat(), "end": end.isoformat()}
-#
-#     query = load_query(query_path)
-#
-#     df = query_data(query, params)
-#
-#     feature_cols = _validate_features(df, job_context)
-#     x = _normalize_features(df, feature_cols)
-#
-#     ModelEnvironment.run_training(x, artifact_path=artifact_path)
-
 
 def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     """
