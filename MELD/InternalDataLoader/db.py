@@ -12,4 +12,3 @@ with open(password_file, "r") as f:
     password = f.readline().strip()
 
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{schema}")
-engine.connect()
