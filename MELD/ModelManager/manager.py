@@ -96,9 +96,7 @@ def run_inference(contract_path: str) -> None:
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        query = job_context.contract["input_schema"]["query"]["statement"]
-
-        df = query_data(query, params, job_context)
+        df = query_data(job_context, params, job_context)
 
         feature_cols = _validate_features(df, job_context)
         x = _normalize_features(df, feature_cols)

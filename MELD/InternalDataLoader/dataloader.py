@@ -4,6 +4,7 @@ from typing import Iterator
 from sqlalchemy import text
 
 import pandas as pd
+from ModelEnvironment import JobContext
 from pandas import DataFrame
 
 from Logger import get_meld_logger
@@ -12,7 +13,7 @@ from .db import engine
 logger = get_meld_logger()
 
 
-def execute_query(sql: str, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:
+def execute_query(job_context: JobContext, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:
     """
     Executes a SQL query and retrieves the result as a DataFrame or an iterator of DataFrames.
 
@@ -24,7 +25,12 @@ def execute_query(sql: str, params: dict | None = None) -> DataFrame | Iterator[
         DataFrame | Iterator[DataFrame]: The result set of the query as a DataFrame
         or an iterator of DataFrames (if applicable).
     """
+    statement = job_context.contract["input_schema"]["query"]["statement"]
+    features = job_context.contract["input_schema"]["features"]
     with (engine.connect() as connection):
-        df = pd.read_sql_query(text(sql), connection, params=params)
+        df = pd.read_sql_query(text(statement),
+                               connection,
+                               params=params,
+                               dtype={ col["name"]: col["datatype"] for col in features})
 
         return df
