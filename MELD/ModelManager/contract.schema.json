@@ -61,7 +61,10 @@
         },
         "environment_variables": {
           "description": "Environment variables to be set in the inference runtime",
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -157,7 +160,8 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/feature"
-          }
+          },
+          "minItems": 1
         },
         "query": {
           "description": "Query for the inference runtime model",
@@ -179,7 +183,12 @@
             "statement"
           ]
         }
-      }
+      },
+      "required": [
+        "temporal_scope",
+        "features",
+        "query"
+      ]
     },
     "output_schema": {
       "description": "Output schema of the inference runtime",
@@ -193,12 +202,19 @@
           ]
         },
         "predictor": {
+          "description": "Predictor columns of the result file, currently only one column supported, might be subject to change",
           "type": "array",
           "items": {
             "$ref": "#/$defs/feature"
-          }
+          },
+          "minItems": 1,
+          "maxItems": 1
         }
-      }
+      },
+      "required": [
+        "type",
+        "predictor"
+      ]
     }
   },
   "required": [
@@ -215,21 +231,18 @@
           "type": "string"
         },
         "datatype": {
-          "description": "Reserved for future use, and might be subject to change",
+          "description": "Datatypes of the feature, currently only Int64, Float64, boolean, string, datetime64[ns] supported, might be subject to change. If the datatype is mismatching the type of the respective query result column, the orchestrator will throw an error",
           "type": "string",
           "enum": [
             "Int64",
             "Float64",
             "boolean",
             "string",
-            "datetime64[ns]",
-            "timedelta64[ns]",
-            "category",
-            "object"
+            "datetime64[ns]"
           ]
         },
         "required": {
-          "description": "Currently unused",
+          "description": "Required flag, if required feature is missing, the orchestrator will throw an error",
           "type": "boolean"
         }
       },
