@@ -135,7 +135,7 @@ Your inference script must:
 1. Load `/input/contract.yaml`
 2. Load `/input/input.csv`
 3. Run inference
-4. Write all results to `/output/` (e.g. `/output/output.csv`)
+4. Write all results to `/output/output.csv`
 5. Exit
 
 **Exit codes:**
@@ -247,7 +247,7 @@ For each inference request, the orchestrator:
 4. Copies `input.csv` and `contract.yaml` to `/input/`.
 5. Starts the container.
 6. Monitors the container until it terminates.
-7. Reads `/output/` and archives results, logs, and metadata.
+7. Reads `/output/output.csv` and archives results, logs, and metadata.
 8. Destroys the container.
 
 If the container exits with a non-zero code, the orchestrator records the execution as failed. The contents of `/output/` are still archived for debugging.
