@@ -1,8 +1,10 @@
+import csv
 import datetime
 import io
 import os
 import tarfile
 import zipfile
+from io import StringIO
 
 import pandas as pd
 import yaml
@@ -12,6 +14,8 @@ from docker.models.containers import Container
 from ModelEnvironment.docker_runtime import create_container, start_container, wait_for_container, \
     stop_container, destroy_container
 from ModelEnvironment.job_context import JobContext, JobStatus
+from utils import validate_feature_datatypes, get_unexpected_features
+
 
 def create_interface_folders(container: Container) -> None:
     """
@@ -85,14 +89,33 @@ def copy_data_to_container(container: Container, input_data: pd.DataFrame, job_c
         raise RuntimeError(error) from e
 
 
-def pack_result_files(output_zip_path: str, archive_bytes: io.BytesIO, job_context: JobContext) -> None:
+def extract_result_file(archive_bytes: io.BytesIO, job_context: JobContext) -> bytes:
+    job_context.logger.info(f"Extracting result file")
+    archive_bytes.seek(0)
+    with tarfile.open(fileobj=archive_bytes, mode="r:*") as in_tar:
+        for member in in_tar.getmembers():
+            if not member.isfile() or not member.name == "output/output.csv":
+                continue
+
+            extracted = in_tar.extractfile(member)
+
+    if extracted is None:
+        raise FileNotFoundError("Result file output.csv not found in inference runtime output folder")
+
+    job_context.logger.info(f"Result file output.csv extracted successfully")
+
+    extracted.seek(0)
+    return extracted.read()
+
+
+def pack_result_file(output_zip_path: str, extracted_file: bytes, job_context: JobContext) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
 
     Parameters:
-        output_tar_path: str
+        output_zip_path: str
             The path where the gzipped tar archive will be created.
-        archive_bytes: io.BytesIO
+        extracted_file: bytes
             A byte stream containing the input tar archive.
         job_context: JobContext
             The job context object, typically used for logging.
@@ -102,17 +125,9 @@ def pack_result_files(output_zip_path: str, archive_bytes: io.BytesIO, job_conte
         tarfile.TarError: If there's an error processing the tar files.
     """
     job_context.logger.info(f"Packing result files")
-    archive_bytes.seek(0)
 
     with zipfile.ZipFile(output_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as out_zip:
-        with tarfile.open(fileobj=archive_bytes, mode="r:*") as in_tar:
-            for member in in_tar.getmembers():
-                if not member.isfile():
-                    continue
-
-                extracted = in_tar.extractfile(member)
-                if extracted is not None:
-                    out_zip.writestr(member.name, extracted.read())
+        out_zip.writestr("/output/output.csv", extracted_file)
 
 
 def pack_metadata_and_logs(output_zip_path: str, job_context: JobContext) -> None:
@@ -171,6 +186,34 @@ def get_output_data_from_container(container: Container, job_context: JobContext
     return archive_bytes
 
 
+def verify_result_data(job_context: JobContext, input_data_df: pd.DataFrame, output_data: bytes):
+    job_context.logger.info("Verifying result data")
+
+    try:
+        csv.Sniffer().sniff(str(output_data))
+    except csv.Error:
+        job_context.logger.warning("Likely invalid CSV format")
+
+    # Convert bytes to string and then to DataFrame
+    data_str = output_data.decode('utf-8')
+    output_df = pd.read_csv(StringIO(data_str))
+    predictors = job_context.contract["output_schema"]["predictor"]
+
+    try:
+        validate_feature_datatypes(output_df, predictors)
+    except ValueError as e:
+        job_context.logger.warning(e)
+
+    unexpected_predictors = get_unexpected_features(output_df, predictors)
+    if unexpected_predictors:
+        job_context.logger.warning(f"Unexpected predictors found: {', '.join(unexpected_predictors)}")
+    input_rows = len(input_data_df.index)
+    output_rows = len(output_df.index)
+    if input_rows != output_rows:
+        job_context.logger.warning("Result data does not match input data: "
+                                   f"Expected {input_rows} rows, got {output_rows} rows")
+
+
 def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
     """
     Runs inference on the provided input data using the configured runtime environment.
@@ -203,8 +246,13 @@ def run_inference(input_data: pd.DataFrame, job_context: JobContext) -> None:
         timespan = datetime.datetime.now() - start
         job_context.logger.info(f"Inference completed in {timespan.total_seconds():.3f} seconds",)
 
-        archive_bytes = get_output_data_from_container(runtime_container, job_context)
-        pack_result_files(output_tar_path, archive_bytes, job_context)
+        archived_output_data = get_output_data_from_container(runtime_container, job_context)
+
+        archive_bytes = extract_result_file(archived_output_data, job_context)
+
+        verify_result_data(job_context, input_data, archive_bytes)
+
+        pack_result_file(output_tar_path, archive_bytes, job_context)
     except Exception as e:
         job_context.logger.exception(f"An exception occurred during inference: {e}")
     finally:
