@@ -81,13 +81,6 @@ class JobContext:
     def image_ref(self):
         return construct_image_ref(self.contract)
 
-    def _get_query_path(self):
-        query_path = os.environ.get("MELD_QUERY_PATH", os.path.join(self._root_path, "resources", "query.sql"))
-
-        if not os.path.exists(query_path):
-            raise FileNotFoundError(f"Query file for job {self.job_id} does not exist")
-        return query_path
-
     def _create_input_folder(self):
         input_path = os.path.join(self._job_folder, "input")
 
