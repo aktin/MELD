@@ -12,11 +12,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    if not argv:
-        logger.error("No command set")
-        return 1
-
-    cmd = argv[0]
+    cmd = argv[0] if argv else "run"
 
     contract_path = os.environ.get("MELD_CONTRACT_FILE", "/resources/contract.yaml")
 
@@ -26,6 +22,9 @@ def main(argv: list[str] | None = None) -> int:
         pull_runtime(contract_path=contract_path)
     elif cmd == "delete":
         remove_runtime(contract_path=contract_path)
+    elif not cmd:
+        pull_runtime(contract_path=contract_path)
+        run_inference(contract_path=contract_path)
     else:
         logger.error(f"Unknown command: {cmd}")
         return 1
