@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 
 class NoTracebackFormatter(logging.Formatter):
@@ -65,7 +66,7 @@ def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False,
     if log_dir and not _has_handler(logger, file_handler_name):
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
-        all_file_handler = logging.FileHandler(os.path.join(log_dir, f"{name}.log"))
+        all_file_handler = RotatingFileHandler(os.path.join(log_dir, f"{name}.log"), maxBytes=10485760, backupCount=10)
         all_file_handler.setFormatter(formatter)
         all_file_handler.setLevel(level)
         all_file_handler.name = file_handler_name
