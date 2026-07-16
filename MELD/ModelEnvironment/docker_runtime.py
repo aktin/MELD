@@ -261,6 +261,6 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
         raise RuntimeError(error)
     except APIError as e:
-        error = f"Failed to create image {image}"
+        error = f"Failed to create container {image}"
         job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
         raise RuntimeError(error) from e
