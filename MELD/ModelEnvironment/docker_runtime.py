@@ -138,7 +138,7 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
             exception is raised with the relevant error message.
     """
     try:
-        job_context.logger.info(f"Starting runtime container {container.id}")
+        job_context.logger.info(f"Starting runtime container {container.name}")
         container.start()
         job_context.log_event("Started runtime container", JobStatus.RUNNING)
     except APIError as e:
@@ -205,9 +205,9 @@ def stop_container(container: Container, job_context: JobContext):
         RuntimeError: If the container could not be stopped due to an API error.
     """
     try:
-        job_context.logger.info(f"Stopping runtime container {container.id}")
+        job_context.logger.info(f"Stopping runtime container {container.name}")
         container.stop()
-        job_context.logger.info(f"Stopped runtime container {container.id}")
+        job_context.logger.info(f"Stopped runtime container {container.name}")
     except APIError as e:
         error = f"Failed to stop runtime container"
         job_context.log_event(error, JobStatus.FAILED, error=str(e))
@@ -223,7 +223,7 @@ def destroy_container(container: Container, job_context: JobContext) -> None:
         job_context (JobContext): The context of the job, which includes logging
                                   and event tracking capabilities.
     """
-    job_context.logger.info(f"Destroying container {container.id}")
+    job_context.logger.info(f"Destroying container {container.name}")
     container.remove()
     job_context.log_event("Container destroyed", JobStatus.DESTROYED)
 
@@ -248,8 +248,10 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         job_context.logger.info(f"Creating runtime container")
         environment_variables = job_context.contract["runtime"].get("environment_variables", {})
         runtime_container = client.containers.create(image,
-                                                     environment=environment_variables, )
-        job_context.log_event(f"Created runtime container {runtime_container.id}",
+                                                     environment=environment_variables,
+                                                     name=f"runtime_{job_context.contract["contract"]["id"]}_{job_context.job_id}",
+                                                     )
+        job_context.log_event(f"Created runtime container {runtime_container.name}",
                               JobStatus.CREATED,
                               image=image,
                               environment_variables=environment_variables, )

@@ -1,4 +1,5 @@
 contract:
+  id: "stationary-admission-test-tfdf"
   name: "stationary-admission-test-tfdf"
   description: "stationary-admission-test-tfdf"
   version: "0.1.0"
@@ -279,7 +280,7 @@ input_schema:
 
 
 output_schema:
-  format: "csv"
+  type: "csv"
   predictor:
     - name: "admitted"
       datatype: "Int64"

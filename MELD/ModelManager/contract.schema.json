@@ -20,12 +20,18 @@
         "version": {
           "description": "Version of the inference runtime",
           "type": "string"
+        },
+        "id": {
+          "description": "Unique identifier of the inference runtime, use alphanumeric characters and hyphens only",
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
         }
       },
       "required": [
         "name",
         "description",
-        "version"
+        "version",
+        "id"
       ]
     },
     "runtime": {
@@ -207,8 +213,7 @@
           "items": {
             "$ref": "#/$defs/feature"
           },
-          "minItems": 1,
-          "maxItems": 1
+          "minItems": 1
         }
       },
       "required": [

@@ -1,4 +1,5 @@
 contract:
+  id: "stationary-admission-test-sklearn"
   name: "stationary-admission-test-sklearn"
   version: "0.1.0"
   description: "Stationary Admission Test"
