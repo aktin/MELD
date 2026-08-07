@@ -1,5 +1,23 @@
 # How to Build a MELD-Compatible Inference Runtime
 
+## Introduction
+
+MELD (Machine Learning Execution and Deployment) is a framework designed to execute machine learning models on the Aktin DWH. It separates data preparation from model execution by running each inference runtime inside an isolated Docker container. This approach ensures that models are executed in a consistent environment, reducing the risk of errors and inconsistencies.
+
+### What is MELD
+
+MELD consists of two main components:
+* **Orchestrator**: Manages the entire lifecycle of model inference, including querying the database, preparing input data, executing the runtime, collecting logs, and archiving results.
+* **Inference Runtime**: A Docker image containing a trained model and the logic to perform inference.
+
+### Inference Runtime
+
+An inference runtime is a Docker image that contains everything needed to execute a machine learning model. This includes the model artifact, dependencies, and any necessary scripts or libraries required for running the model.
+
+### Contract
+
+The contract is crucial as it defines how the orchestrator should interact with your runtime. It specifies details such as the Docker image to use, input and output schemas, and execution parameters. This file acts as a contract between the orchestrator and the runtime, ensuring that both are aligned in their expectations.
+
 ## Prerequisites
 
 Before you start, make sure you have:
@@ -22,12 +40,21 @@ project/
 ├── resources/
 │   ├── contract.yaml
 │   └── query.sql
+├── model_card.md
 └── Dockerfile
 ```
 
 ## Step 1: Write the Model Contract
 
 Create `resources/contract.yaml`. This file tells the orchestrator how to run your runtime and what data to provide. See [the reference](https://github.com/aktin/MELD/blob/main/docs/contract_reference.md) for details.
+
+The `temporal_scope` defines the time window for data retrieval. With `type: relative`, the orchestrator calculates:
+- `start = anchor + value` (e.g. anchor minus 1 month)
+- `end = anchor`
+
+The feature names in `input_schema.features` must match the column names returned by your SQL query.
+
+**NOTE** The [`runtime.image.digest`](#build-and-push) and [`input_schema.query.statement`](#sql-query) fields need to be filled in retroactively.  
 
 ```yaml
 contract:
@@ -98,13 +125,9 @@ output_schema:
       datatype: "Float64"
 ```
 
-The `temporal_scope` defines the time window for data retrieval. With `type: relative`, the orchestrator calculates:
-- `start = anchor + value` (e.g. anchor minus 1 month)
-- `end = anchor`
-
-The feature names in `input_schema.features` must match the column names returned by your SQL query.
 
 ## Step 2: Write the SQL Query
+<a id="sql-query"></a>
 
 Write an SQL query for the Aktin DWH. The result of the query is the input to your inference logic.
 
@@ -122,6 +145,7 @@ WHERE timestamp BETWEEN :start AND :end;
 ```
 
 ## Step 3: Implement the Inference Logic
+<a id="inference-logic"></a>
 
 When the orchestrator starts your container, it provides:
 
@@ -134,8 +158,26 @@ Your inference script must:
 
 1. Load `/input/contract.yaml`
 2. Load `/input/input.csv`
+   * The first row is the header
+   * The remaining rows are the data
+   * The headers match the feature names defined in `input_schema.features`
+   ```csv
+   timestamp,temperature,precipitation,weekday,holiday,patient_count
+   2026-04-23T13:56:55Z,22.5,0,Friday,False,150 
+   2026-04-24T13:56:55Z,23.0,0,Saturday,True,180
+   ...
+   ```
 3. Run inference
 4. Write all results to `/output/output.csv`
+   * The first row is the header
+   * The remaining rows are the data
+   * The header must match the `output_schema.predictor` field in the contract file
+   ```csv
+   predicted_patient_count 
+   170 
+   190 
+   ```
+   
 5. Exit
 
 **Exit codes:**
@@ -160,6 +202,7 @@ if __name__ == "__main__":
 ```
 
 ## Step 4: Write the Dockerfile
+<a id="dockerfile"></a>
 
 Your container must start the inference script automatically when launched. The orchestrator does not call anything inside the container — it only starts it.
 
@@ -194,15 +237,20 @@ ENTRYPOINT ["python", "inference.py"]
 ```
 
 ## Step 5: Build and Push the Image
+<a id="build-and-push"></a>
+
+Now you can build and push your image to a container registry. The `runtime.image.name` and `runtime.image.tag` in your contract must match the pushed image tag exactly.
 
 ```bash
 docker build -t my-registry/my-org/my-image:0.1.0 .
 docker push my-registry/my-org/my-image:0.1.0
 ```
 
-The `image.name` and `image.tag` in your contract must match the pushed image exactly.
+After building and pushing, you can copy the image digest from the output to the contract file, and update the `runtime.image.digest` field.
+
 
 ## Logging
+<a id="logging"></a>
 
 Write informational messages to `stdout` and errors or warnings to `stderr`. The orchestrator captures both streams continuously and includes them in the execution archive.
 
@@ -215,12 +263,13 @@ print("Loading model...")                     # stdout
 print("Error: missing feature", file=sys.stderr)  # stderr
 ```
 
-> **@TODO** Structured log format — not yet defined.
-> **@TODO** Progress reporting — not yet defined.
+> * **@TODO** Structured log format — not yet defined.
+> * **@TODO** Progress reporting — not yet defined.
 
 ## Model Card
+<a id="model-card"></a>
 
-The model card is a markdown file that describes the model and its performance. It has no formal structure, but it should contain the following sections:
+The model card is a markdown file that describes the model and its performance.  It has no formal structure, but it should contain the following sections:
 
 * Model description
 * Training data
@@ -233,11 +282,12 @@ The model card is a markdown file that describes the model and its performance. 
 * Model citations
 * Model acknowledgements
 
-The card should be stored in the Git repository alongside the model artifact. If you are using GHCR.io and Github, you can connect the published image and the repository using the `org.opencontainers.image.source` label. Then, the card should be displayed on the runtime image's homepage.
+The card should be stored in the Git repository root alongside the model and inference code. If you are using GHCR.io and Github, you can connect the published image and the repository using the `org.opencontainers.image.source` label. Then, the card should be displayed on the runtime image's homepage.
 
-For more information, see [Google Model Cards](https://deepmind.google/models/model-cards/).
+> **@TODO** Compose and link examples.
 
 ## Reference: Orchestrator Lifecycle
+<a id="orchestrator-lifecycle"></a>
 
 For each inference request, the orchestrator:
 
