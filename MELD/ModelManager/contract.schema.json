@@ -5,13 +5,18 @@
   "description": "",
   "type": "object",
   "properties": {
+    "schema_version": {
+      "description": "Schema version of the inference runtime contract",
+      "type": "string"
+    },
     "contract": {
       "description": "Inference runtime metadata",
       "type": "object",
       "properties": {
         "name": {
           "description": "Comprehensive descriptive name of the inference runtime",
-          "type": "string"
+          "type": "string",
+          "examples": ["Emergency Department Heatwave Patient Encounter Prediction"]
         },
         "description": {
           "description": "Description of the inference runtime",
@@ -19,12 +24,16 @@
         },
         "version": {
           "description": "Version of the inference runtime",
-          "type": "string"
+          "type": "string",
+          "examples": ["1.0.0"]
         },
         "id": {
           "description": "Unique identifier of the inference runtime, use alphanumeric characters and hyphens only",
           "type": "string",
-          "pattern": "^[a-z0-9-]+$"
+          "pattern": "^[a-z0-9-]+$",
+          "maxLength": 50,
+          "minLength": 1,
+          "examples": ["heatwave-patient-encounter"]
         }
       },
       "required": [
@@ -39,20 +48,26 @@
       "type": "object",
       "properties": {
         "framework": {
-          "description": "Framework of the inference runtime",
-          "type": "string"
+          "description": "Deep learning framework used in the inference runtime",
+          "type": "string",
+          "examples": ["Tensorflow", "sklearn", "PyTorch"],
+          "minLength": 1
         },
         "image": {
-          "description": "Docker image of the inference runtime",
+          "description": "Docker image identifier of the inference runtime, will used to pull the image from a registry. The constructed identifier will be: <name>:<tag>@<digest>",
           "type": "object",
           "properties": {
             "name": {
               "description": "Docker image repository",
-              "type": "string"
+              "type": "string",
+              "examples": ["ghcr.io/aktin/heatwave-patient-encounter"],
+              "minLength": 1
             },
             "tag": {
               "description": "Docker image tag",
-              "type": "string"
+              "type": "string",
+              "examples": ["0.1.0", "3.0", "1.0.0-rc.1+20210101.123456"],
+              "minLength": 1
             },
             "digest": {
               "description": "Docker image digest",
