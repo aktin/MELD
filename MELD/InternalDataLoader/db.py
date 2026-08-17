@@ -17,5 +17,8 @@ try:
 except FileNotFoundError:
     logger.error(f"Database password file could not be found")
     exit(1)
+except TypeError:
+    logger.error(f"DB_PASSWORD_FILE is not set")
+    exit(1)
 
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{schema}")
