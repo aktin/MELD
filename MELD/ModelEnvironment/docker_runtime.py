@@ -147,7 +147,7 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
         raise RuntimeError(error) from e
 
 
-def wait_for_container(container: Container, job_context: JobContext, timeout_seconds: int = 500):
+def wait_for_container(container: Container, job_context: JobContext, timeout_seconds: int = 500) -> int:
     """
     Waits for a specified container to complete its execution within a given timeout period.
 
@@ -169,6 +169,8 @@ def wait_for_container(container: Container, job_context: JobContext, timeout_se
     )
     log_thread.start()
 
+    exit_code = -1
+
     try:
         result = container.wait(timeout=timeout_seconds)
         exit_code = result["StatusCode"]
@@ -177,8 +179,9 @@ def wait_for_container(container: Container, job_context: JobContext, timeout_se
             error = f"Runtime container failed with exit code {exit_code}"
             job_context.log_event("Inference failed", JobStatus.FAILED,
                                   error=error)
-            raise RuntimeError(error)
-        job_context.log_event("Inference has completed successfully", JobStatus.SUCCESS)
+            # raise RuntimeError(error)
+        else:
+            job_context.log_event("Inference has completed successfully", JobStatus.SUCCESS)
     except requests.exceptions.ReadTimeout:
         error = f"Runtime container timed out after {timeout_seconds} seconds"
         job_context.log_event(error, JobStatus.TIMEOUT, timeout=timeout_seconds)
@@ -190,6 +193,8 @@ def wait_for_container(container: Container, job_context: JobContext, timeout_se
 
         if log_thread.is_alive():
             logger.warning("Container log streaming thread is still running")
+
+    return exit_code
 
 
 def stop_container(container: Container, job_context: JobContext):
@@ -249,7 +254,7 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         environment_variables = job_context.contract["runtime"].get("environment_variables", {})
         runtime_container = client.containers.create(image,
                                                      environment=environment_variables,
-                                                     name=f"runtime_{job_context.contract["contract"]["id"]}_{job_context.job_id}",
+                                                     name=f"runtime_{job_context.contract['contract']['id']}_{job_context.job_id}",
                                                      )
         job_context.log_event(f"Created runtime container {runtime_container.name}",
                               JobStatus.CREATED,
