@@ -264,3 +264,17 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
         error = f"Failed to create container {image}"
         job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
         raise RuntimeError(error) from e
+
+
+def get_image_size(image: str, job_context: JobContext,):
+    try:
+        docker_image = client.images.get(image)
+        return docker_image.attrs["Size"]
+    except NotFound as e:
+        error = f"Runtime image {image} not found"
+        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        raise RuntimeError(error)
+    except APIError as e:
+        error = f"Failed to get image {image}"
+        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        raise RuntimeError(error) from e
