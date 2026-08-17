@@ -26,7 +26,7 @@ def load_contract(path: str) -> dict:
     return contract
 
 def _validate_contract(contract: dict):
-    with open(os.path.join(os.path.dirname(__file__), "contract.schema.json"), "r") as f:
+    with open(os.path.join(os.path.dirname(__file__), "../resources/contract.schema.json"), "r") as f:
         schema = json.load(f)
 
     validate(contract, schema)
