@@ -112,7 +112,7 @@ class JobContext:
         return job_folder
 
     def _create_job_id(self):
-        return f"{self.contract['contract']['id']}_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}"
+        return f"{self.contract['contract']['id']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     def set_status(self, status: JobStatus):
         self.status = status
