@@ -1,72 +1,43 @@
+import json
 import os
+import zipfile
 from datetime import datetime, timedelta
 
 import isodate
 
 import ModelEnvironment
 import pandas as pd
+from ExecutionMonitor.metrics import Metrics
+from ExecutionMonitor.monitor import ExecutionMonitor
 from InternalDataLoader import execute_query
 from Logger.logger import get_meld_logger
 from ModelEnvironment import JobContext
 from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_image_exists
-from ModelEnvironment.job_context import JobStatus
+from ModelEnvironment.job_context import JobStatus, ContextProvider
 from ModelManager import load_contract
 from utils import construct_image_ref, validate_required_features, validate_feature_datatypes, get_unexpected_features
 
 logger = get_meld_logger()
 
 
-def load_query(file_path: str, job_context: JobContext) -> str:
-    """
-    Loads the SQL query from the specified file.
-
-    Parameters:
-    file_path: str
-        The path to the SQL file to be loaded.
-
-    job_context: JobContext
-        The context object that includes the logger to be used for
-        logging file loading operations.
-
-    Raises:
-    FileNotFoundError
-        If the specified file path does not exist.
-
-    ValueError
-        If the provided file path is not a SQL file.
-
-    Returns:
-    str
-        The content of the SQL file as a string.
-    """
-    job_context.logger.info(f"Loading query from {file_path}")
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The file {file_path} does not exist.")
-    if not file_path.endswith(".sql"):
-        raise ValueError(f"The file {file_path} is not a SQL file. ")
-
-    with open(file_path, "r") as file:
-        query = file.read()
-        return query
-
-
-def query_data(query: str, params: dict, job_context: JobContext) -> pd.DataFrame:
+def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor) -> pd.DataFrame:
     """
     Executes a SQL query and returns the resulting data as a DataFrame.
 
     Arguments:
-    query: A string representing the SQL query to execute.
     params: A dictionary of parameters to use in the query.
     job_context: An instance of JobContext used for logging and contextual information
     relevant to the job execution.
+    monitor: Execution monitor used for query timing and metrics.
 
     Returns:
     A pandas DataFrame containing the query results.
     """
     job_context.logger.info(f"Executing query")
-    start = datetime.now()
-    data = execute_query(query, params)
-    timespan = datetime.now() - start
+    monitor.start_query_execution_time()
+    data = execute_query(job_context, params)
+    timespan = monitor.stop_query_execution_time()
+    monitor.update_metric_value(Metrics.QUERY_RESULT_ROW_COUNT, len(data))
     job_context.logger.info(f"Query returned {len(data)} rows and took {timespan.total_seconds():.3f} seconds.")
     return data
 
@@ -87,6 +58,9 @@ def run_inference(contract_path: str) -> None:
     None
     """
     job_context = JobContext.create_job_context(contract_path)
+    provider = ContextProvider(job_context)
+    monitor = ExecutionMonitor(provider)
+    monitor.start_total_execution_time()
     try:
         job_context.log_event("Preparing inference", JobStatus.PREPARING)
 
@@ -95,15 +69,30 @@ def run_inference(contract_path: str) -> None:
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        df = query_data(job_context, params, job_context)
+        df = query_data(job_context, params, monitor)
 
         feature_cols = _validate_features(df, job_context)
         x = _normalize_features(df, feature_cols)
 
-        ModelEnvironment.run_inference(x, job_context)
+        ModelEnvironment.run_inference(x, job_context, monitor)
     except Exception as e:
         job_context.logger.exception(f"An exception occurred during inference: {e}")
+    finally:
+        monitor.stop_total_execution_time()
 
+        zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
+        pack_metrics(zip_path, job_context, monitor)
+
+
+def pack_metrics(path: str, job_context: JobContext, monitor: ExecutionMonitor) -> None:
+    """
+    Packs result files from an input archive into a gzipped tar file.
+    """
+    job_context.logger.info("Packing result files")
+
+    mode = "a" if os.path.exists(path) else "w"
+    with zipfile.ZipFile(path, mode=mode, compression=zipfile.ZIP_DEFLATED) as out_zip:
+        out_zip.writestr("/output/metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
 
 def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     """
@@ -206,7 +195,7 @@ def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
 
     unexpected_features = get_unexpected_features(df, features)
     if unexpected_features:
-        job_context.logger.warn(f"Unexpected features: {", ".join(unexpected_features)}")
+        job_context.logger.warning(f"Unexpected features: {', '.join(unexpected_features)}")
 
     return features
 
