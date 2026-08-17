@@ -167,3 +167,10 @@ class JobContext:
     def create_job_context(contract_path: str):
         context = JobContext(contract_path=contract_path)
         return context
+
+class ContextProvider:
+    def __init__(self, job_context: JobContext):
+        self.job_context = job_context
+
+    def get(self) -> JobContext:
+        return self.job_context
