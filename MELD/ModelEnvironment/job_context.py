@@ -2,7 +2,7 @@ import datetime
 import os.path
 
 from Logger import get_job_logger
-from ModelManager import config_loader
+from ModelManager import load_contract
 from utils import construct_image_ref
 
 
@@ -30,7 +30,7 @@ class JobContext:
         self.container_status = None
 
         self.contract_path = contract_path
-        self.contract = config_loader.load_contract(contract_path)
+        self.contract = load_contract(contract_path)
 
         self.job_id = self._create_job_id()
 

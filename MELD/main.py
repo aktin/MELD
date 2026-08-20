@@ -2,8 +2,7 @@ import os
 import sys
 
 from Logger import get_meld_logger
-from ModelManager import run_inference
-from ModelManager.manager import pull_runtime, remove_runtime
+from ModelManager import pull_runtime, remove_runtime, run_inference
 
 
 def main(argv: list[str] | None = None) -> int:
