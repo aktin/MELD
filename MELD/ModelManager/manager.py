@@ -7,26 +7,20 @@ import isodate
 
 import ModelEnvironment
 import pandas as pd
-from ExecutionJournal.journal import ExecutionJournal
 from ExecutionMonitor.metrics import Metrics
 from ExecutionMonitor.monitor import ExecutionMonitor
 from InternalDataLoader import execute_query
 from Logger.logger import get_meld_logger
 from ModelEnvironment import JobContext
 from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_image_exists
-from ModelEnvironment.job_context import ContextProvider
+from ModelEnvironment.job_context import JobStatus, ContextProvider
 from ModelManager import load_contract
 from utils import construct_image_ref, validate_required_features, validate_feature_datatypes, get_unexpected_features
 
 logger = get_meld_logger()
 
 
-def query_data(
-        job_context: JobContext,
-        params: dict,
-        monitor: ExecutionMonitor,
-        journal: ExecutionJournal,
-) -> pd.DataFrame:
+def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor) -> pd.DataFrame:
     """
     Executes a SQL query and returns the resulting data as a DataFrame.
 
@@ -39,24 +33,12 @@ def query_data(
     Returns:
     A pandas DataFrame containing the query results.
     """
-    job_context.logger.info("Executing query")
-    journal.append_entry("query_started", "Executing the DWH query")
+    job_context.logger.info(f"Executing query")
     monitor.start_query_execution_time()
-    try:
-        data = execute_query(job_context, params)
-        timespan = monitor.stop_query_execution_time()
-    except Exception as error:
-        journal.append_entry("query_failed", str(error), error_type=type(error).__name__)
-        raise
-
+    data = execute_query(job_context, params)
+    timespan = monitor.stop_query_execution_time()
     monitor.update_metric_value(Metrics.QUERY_RESULT_ROW_COUNT, len(data))
     job_context.logger.info(f"Query returned {len(data)} rows and took {timespan.total_seconds():.3f} seconds.")
-    journal.append_entry(
-        "query_finished",
-        "DWH query completed",
-        row_count=len(data),
-        duration_seconds=timespan.total_seconds(),
-    )
     return data
 
 
@@ -77,55 +59,40 @@ def run_inference(contract_path: str) -> None:
     """
     job_context = JobContext.create_job_context(contract_path)
     provider = ContextProvider(job_context)
-    journal = ExecutionJournal(provider)
     monitor = ExecutionMonitor(provider)
-
-    journal.append_entry(
-        "job_created",
-        "Inference job created",
-        contract_path=contract_path,
-        contract_id=job_context.contract["contract"]["id"],
-        contract_version=job_context.contract["contract"]["version"],
-    )
-    journal.append_entry("contract_validated", "Contract loaded and validated")
-
     monitor.start_total_execution_time()
     try:
-        journal.append_entry("preparing_inference", "Preparing inference")
+        job_context.log_event("Preparing inference", JobStatus.PREPARING)
 
-        ensure_image_exists(job_context, journal)
+        ensure_image_exists(job_context)
 
         start, end = _compute_time_window(job_context)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        df = query_data(job_context, params, monitor, journal)
+        df = query_data(job_context, params, monitor)
 
-        feature_cols = _validate_features(df, job_context, journal)
+        feature_cols = _validate_features(df, job_context)
         x = _normalize_features(df, feature_cols)
-        journal.append_entry("input_prepared", "Inference input prepared", row_count=len(x), column_count=len(x.columns))
 
-        ModelEnvironment.run_inference(x, job_context, monitor, journal)
-    except Exception as error:
-        journal.append_entry("job_failed", str(error), error_type=type(error).__name__)
-        job_context.logger.exception(f"An exception occurred during inference: {error}")
+        ModelEnvironment.run_inference(x, job_context, monitor)
+    except Exception as e:
+        job_context.logger.exception(f"An exception occurred during inference: {e}")
     finally:
         monitor.stop_total_execution_time()
 
         zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
-        pack_records(zip_path, job_context, monitor, journal)
+        pack_metrics(zip_path, job_context, monitor)
 
 
-def pack_records(path: str, job_context: JobContext, monitor: ExecutionMonitor, journal: ExecutionJournal) -> None:
+def pack_metrics(path: str, job_context: JobContext, monitor: ExecutionMonitor) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
     """
-    job_context.logger.info("Packing record files")
+    job_context.logger.info("Packing result files")
 
     mode = "a" if os.path.exists(path) else "w"
     with zipfile.ZipFile(path, mode=mode, compression=zipfile.ZIP_DEFLATED) as out_zip:
-        out_zip.writestr("records/metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
-        out_zip.write(journal.journal_path, "records/journal.jsonl")
-
+        out_zip.writestr("/output/metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
 
 def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     """
@@ -201,11 +168,7 @@ def remove_runtime(contract_path):
 
 
 
-def _validate_features(
-        df: pd.DataFrame,
-        job_context: JobContext,
-        journal: ExecutionJournal,
-) -> list[dict]:
+def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
     """
     Validates the presence of required feature columns in a given dataframe against the input schema.
 
@@ -224,26 +187,15 @@ def _validate_features(
         If the required feature columns are missing from the dataframe.
     """
     job_context.logger.info(f"Validating features")
-    journal.append_entry("input_validation_started", "Validating query result against input schema")
     features = job_context.contract["input_schema"]["features"]
 
-    try:
-        validate_required_features(df, features)
-        validate_feature_datatypes(df, features)
-    except Exception as error:
-        journal.append_entry("input_validation_failed", str(error), error_type=type(error).__name__)
-        raise
+    validate_required_features(df, features)
+
+    validate_feature_datatypes(df, features)
 
     unexpected_features = get_unexpected_features(df, features)
     if unexpected_features:
         job_context.logger.warning(f"Unexpected features: {', '.join(unexpected_features)}")
-        journal.append_entry(
-            "input_validation_warning",
-            "Unexpected input columns were returned by the query",
-            columns=unexpected_features,
-        )
-
-    journal.append_entry("input_validated", "Query result conforms to the input schema")
 
     return features
 

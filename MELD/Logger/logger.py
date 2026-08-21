@@ -108,5 +108,5 @@ def get_inference_logger(job_id: str) -> logging.Logger:
     :return: A configured logger instance for the specified job's inference operations.
     :rtype: logging.Logger
     """
-    return _setup_logger(f"meld.job{job_id}.inference", propagate=True, console=False)
+    return _setup_logger(f"meld.job{job_id}.inference", propagate=True, console=True)
 
