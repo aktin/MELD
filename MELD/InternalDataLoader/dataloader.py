@@ -1,16 +1,12 @@
 from typing import Iterator
 
-# TODO: ergibt sqlalchemy sinn?
+import pandas as pd
+from pandas import DataFrame
 from sqlalchemy import text
 
-import pandas as pd
 from ModelEnvironment import JobContext
-from pandas import DataFrame
 
-from Logger import get_meld_logger
 from .db import engine
-
-logger = get_meld_logger()
 
 
 def execute_query(job_context: JobContext, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:

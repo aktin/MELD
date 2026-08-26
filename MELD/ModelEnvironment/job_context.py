@@ -1,6 +1,6 @@
 import datetime
 import json
-import os.path
+import os
 from enum import Enum
 
 from Logger import get_job_logger
@@ -126,10 +126,6 @@ class JobContext:
     def log_event(self, message: str, event: JobStatus, **kwargs):
         self.logger.debug(message)
         self.set_status(event)
-        # with open(os.path.join(self.status_path, "events.jsonl"), "a") as f:
-        #     f.write(json.dumps(
-        #         {"message": message, "event": event.value, "timestamp": datetime.datetime.now().isoformat(), **kwargs},
-        #         sort_keys=True) + "\n")
 
     def _create_status_folder(self):
         status_path = os.path.join(self._job_folder, "status")

@@ -1,6 +1,7 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
+from logging.handlers import RotatingFileHandler
+
 
 class NoTracebackFormatter(logging.Formatter):
     """
@@ -109,4 +110,3 @@ def get_inference_logger(job_id: str) -> logging.Logger:
     :rtype: logging.Logger
     """
     return _setup_logger(f"meld.job{job_id}.inference", propagate=True, console=True)
-

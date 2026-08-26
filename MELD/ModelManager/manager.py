@@ -4,18 +4,27 @@ import zipfile
 from datetime import datetime, timedelta
 
 import isodate
-
-import ModelEnvironment
 import pandas as pd
-from ExecutionMonitor.metrics import Metrics
-from ExecutionMonitor.monitor import ExecutionMonitor
+
+from ExecutionMonitor import Metrics, ExecutionMonitor
 from InternalDataLoader import execute_query
-from Logger.logger import get_meld_logger
-from ModelEnvironment import JobContext
-from ModelEnvironment.docker_runtime import pull_image, delete_image, ensure_image_exists
-from ModelEnvironment.job_context import JobStatus, ContextProvider
+from Logger import get_meld_logger
+from ModelEnvironment import (
+    ContextProvider,
+    JobContext,
+    JobStatus,
+    delete_image,
+    ensure_image_exists,
+    pull_image,
+    run_inference as run_runtime_inference,
+)
 from ModelManager import load_contract
-from utils import construct_image_ref, validate_required_features, validate_feature_datatypes, get_unexpected_features
+from utils import (
+    construct_image_ref,
+    get_unexpected_features,
+    validate_feature_datatypes,
+    validate_required_features,
+)
 
 logger = get_meld_logger()
 
@@ -78,7 +87,7 @@ def run_inference(contract_path: str) -> None:
         finally:
             monitor.stop_feature_computation_time()
 
-        ModelEnvironment.run_inference(x, job_context, monitor)
+        run_runtime_inference(x, job_context, monitor)
     except Exception as e:
         job_context.logger.exception(f"An exception occurred during inference: {e}")
     finally:

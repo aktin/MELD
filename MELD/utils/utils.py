@@ -6,10 +6,7 @@ This module provides helper functions to resolve file paths relative to a
 base directory, load and parse YAML files into dictionaries, sanitize and
 validate URLs, generate safe filenames, and download files from the web.
 """
-import re
 from pathlib import Path
-from urllib.parse import urlsplit, unquote, quote, urlunsplit
-from urllib.request import Request, urlopen
 
 import yaml
 

@@ -1,8 +1,10 @@
 import datetime
 
 import __version__
-from ExecutionMonitor.metrics import Metrics
-from ModelEnvironment.job_context import ContextProvider
+
+from ExecutionMonitor import Metrics
+from ModelEnvironment import ContextProvider
+
 
 class Timer:
     start_metric: Metrics
@@ -58,6 +60,16 @@ class ExecutionMonitor:
 
     def stop_query_execution_time(self):
         return self._stop_timer(Metrics.QUERY_EXECUTION_TIME)
+
+    def start_feature_computation_time(self):
+        self._start_timer(
+            Metrics.FEATURE_COMPUTATION_TIME,
+            Metrics.FEATURE_COMPUTATION_START_TIMESTAMP,
+            Metrics.FEATURE_COMPUTATION_END_TIMESTAMP,
+        )
+
+    def stop_feature_computation_time(self):
+        return self._stop_timer(Metrics.FEATURE_COMPUTATION_TIME)
 
     def start_inference_time(self):
         self._start_timer(Metrics.INFERENCE_TIME, Metrics.INFERENCE_START_TIMESTAMP, Metrics.INFERENCE_END_TIMESTAMP)

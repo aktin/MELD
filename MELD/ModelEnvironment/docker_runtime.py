@@ -2,13 +2,12 @@ import sys
 import threading
 
 import docker
-from docker.errors import APIError, NotFound, ImageNotFound
+import requests
+from docker.errors import APIError, ImageNotFound, NotFound
 from docker.models.containers import Container
 
-import requests
-
-from Logger.logger import get_inference_logger, get_meld_logger
-from ModelEnvironment.job_context import JobStatus, JobContext
+from Logger import get_inference_logger, get_meld_logger
+from ModelEnvironment import JobContext, JobStatus
 
 client = docker.from_env()
 

@@ -1,9 +1,9 @@
 import json
-import os.path
+import os
 
 from jsonschema import validate
 
-from Logger.logger import get_meld_logger
+from Logger import get_meld_logger
 from utils import load_yaml
 
 logger = get_meld_logger()
