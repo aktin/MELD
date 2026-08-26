@@ -71,8 +71,12 @@ def run_inference(contract_path: str) -> None:
 
         df = query_data(job_context, params, monitor)
 
-        feature_cols = _validate_features(df, job_context)
-        x = _normalize_features(df, feature_cols)
+        monitor.start_feature_computation_time()
+        try:
+            feature_cols = _validate_features(df, job_context)
+            x = _normalize_features(df, feature_cols)
+        finally:
+            monitor.stop_feature_computation_time()
 
         ModelEnvironment.run_inference(x, job_context, monitor)
     except Exception as e:

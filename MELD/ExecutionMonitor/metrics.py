@@ -1,6 +1,9 @@
 from enum import StrEnum
 
+
 # TODO KSI?
+
+
 class Metrics(StrEnum):
     TOTAL_EXECUTION_TIME = "total_execution_time"
     TOTAL_EXECUTION_START_TIMESTAMP = "total_execution_start_timestamp"
@@ -9,6 +12,10 @@ class Metrics(StrEnum):
     QUERY_EXECUTION_TIME = "query_execution_time"
     QUERY_EXECUTION_START_TIMESTAMP = "query_execution_start_timestamp"
     QUERY_EXECUTION_END_TIMESTAMP = "query_execution_end_timestamp"
+
+    FEATURE_COMPUTATION_TIME = "feature_computation_time"
+    FEATURE_COMPUTATION_START_TIMESTAMP = "feature_computation_start_timestamp"
+    FEATURE_COMPUTATION_END_TIMESTAMP = "feature_computation_end_timestamp"
 
     INFERENCE_TIME = "inference_time"
     INFERENCE_START_TIMESTAMP = "inference_start_timestamp"
