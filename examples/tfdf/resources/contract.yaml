@@ -8,7 +8,7 @@ runtime:
   image:
     name: "ghcr.io/aktin/meld-runtime-examples-tfdf"
     tag: "1.0.0"
-    digest: "sha256:d7a0d999b4647543f72ceab7d07a2cd09e7c07ef497a4bb1aa3a765ebac36a9e"
+    digest: "sha256:9be0fb375ab93aa9d2f29674b471aeda3bb4aa25a5c6c0ddbe869d81d5ca688c"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
 

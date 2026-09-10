@@ -9,7 +9,7 @@ runtime:
   image:
     name: "ghcr.io/aktin/meld-runtime-examples-nn"
     tag: "1.0.0"
-    digest: "sha256:af99356afc28955895878fea10db2c8aeb4917e178de76c301d1c15393982939"
+    digest: "sha256:373e9e5dbfbdc8ff4c2fd65c37359ed244e722298636661d45211571c5d542e3"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
 

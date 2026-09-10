@@ -8,7 +8,7 @@ runtime:
   image:
     name: "ghcr.io/aktin/meld-runtime-examples-sklearn"
     tag: "1.0.0"
-    digest: "sha256:"
+    digest: "sha256:1d0a3ca3bcef7d065579d6598937c55aa30902dd72935252cd69efb8cecdd4a3"
 
 input_schema:
   temporal_scope:
