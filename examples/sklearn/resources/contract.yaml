@@ -1,5 +1,4 @@
 contract:
-  id: "stationary-admission-test-sklearn"
   name: "stationary-admission-test-sklearn"
   version: "0.1.0"
   description: "Stationary Admission Test"
@@ -7,8 +6,8 @@ contract:
 runtime:
   framework: "scikit-learn"
   image:
-    name: "ghcr.io/simhue/meld/runtime_examples/sklearn"
-    tag: "0.1.0"
+    name: "ghcr.io/aktin/meld-runtime-examples-sklearn"
+    tag: "1.0.0"
     digest: "sha256:"
 
 input_schema:

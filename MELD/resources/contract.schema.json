@@ -14,9 +14,12 @@
       "type": "object",
       "properties": {
         "name": {
-          "description": "Comprehensive descriptive name of the inference runtime",
+          "description": "Name of the inference runtime, use alphanumeric characters and hyphens only",
           "type": "string",
-          "examples": ["Emergency Department Heatwave Patient Encounter Prediction"]
+          "pattern": "^[a-z0-9-]+$",
+          "maxLength": 50,
+          "minLength": 1,
+          "examples": ["heatwave-patient-encounter"]
         },
         "description": {
           "description": "Description of the inference runtime",
@@ -26,21 +29,12 @@
           "description": "Version of the inference runtime",
           "type": "string",
           "examples": ["1.0.0"]
-        },
-        "id": {
-          "description": "Unique identifier of the inference runtime, use alphanumeric characters and hyphens only",
-          "type": "string",
-          "pattern": "^[a-z0-9-]+$",
-          "maxLength": 50,
-          "minLength": 1,
-          "examples": ["heatwave-patient-encounter"]
         }
       },
       "required": [
         "name",
         "description",
-        "version",
-        "id"
+        "version"
       ]
     },
     "runtime": {

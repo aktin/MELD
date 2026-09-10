@@ -7,8 +7,8 @@ contract:
 runtime:
   framework: "tensorflow"
   image:
-    name: "ghcr.io/simhue/meld/runtime_examples/nn"
-    tag: "0.2.1-SNAPSHOT"
+    name: "ghcr.io/aktin/meld-runtime-examples-nn"
+    tag: "1.0.0"
     digest: "sha256:af99356afc28955895878fea10db2c8aeb4917e178de76c301d1c15393982939"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
