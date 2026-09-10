@@ -7,10 +7,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 
@@ -55,15 +57,17 @@ def changed_example_names(before: str | None, after: str | None) -> list[str]:
     return sorted(names)
 
 
-def image_config(example_name: str) -> tuple[Path, Path, str, str]:
+def image_config(example_name: str) -> tuple[Path, Path, Path, str, str]:
     example_dir = ROOT / "examples" / example_name
     build_dir = example_dir / "build"
     dockerfile = build_dir / "Dockerfile"
     contract_path = example_dir / "resources" / "contract.yaml"
+    artifact_dir = example_dir / "artifact"
+    inference_dir = example_dir / "inference"
 
     missing = [
         str(path.relative_to(ROOT))
-        for path in (build_dir, dockerfile, contract_path)
+        for path in (build_dir, dockerfile, contract_path, artifact_dir, inference_dir)
         if not path.exists()
     ]
     if missing:
@@ -84,7 +88,24 @@ def image_config(example_name: str) -> tuple[Path, Path, str, str]:
     if not image_name.startswith("ghcr.io/"):
         raise SystemExit(f"runtime.image.name must target ghcr.io in {contract_path}: {image_name}")
 
-    return build_dir, contract_path, image_name, image_tag
+    return example_dir, build_dir, contract_path, image_name, image_tag
+
+
+@contextmanager
+def staged_build_context(example_dir: Path, build_dir: Path) -> Iterator[None]:
+    """Stage files outside ``build/`` into the Docker context temporarily."""
+
+    context_dir = build_dir / ".context"
+    if context_dir.exists():
+        raise SystemExit(f"Build context already exists; another build may be running: {context_dir}")
+
+    try:
+        context_dir.mkdir()
+        shutil.copytree(example_dir / "artifact", context_dir / "artifact")
+        shutil.copytree(example_dir / "inference", context_dir / "inference")
+        yield
+    finally:
+        shutil.rmtree(context_dir, ignore_errors=True)
 
 
 def pushed_digest(image_ref: str, metadata_file: Path) -> str:
@@ -110,31 +131,32 @@ def pushed_digest(image_ref: str, metadata_file: Path) -> str:
 
 
 def publish_example(example_name: str) -> None:
-    build_dir, contract_path, image_name, image_tag = image_config(example_name)
+    example_dir, build_dir, contract_path, image_name, image_tag = image_config(example_name)
     image_ref = f"{image_name}:{image_tag}"
 
     print(f"Building affected example {example_name}: {image_ref}", flush=True)
-    with tempfile.NamedTemporaryFile(prefix="example-image-", suffix=".json") as metadata_file:
-        subprocess.run(
-            [
-                "docker",
-                "buildx",
-                "build",
-                "--build-arg",
-                f"IMAGE_VERSION={image_tag}",
-                "--file",
-                str(build_dir / "Dockerfile"),
-                "--tag",
-                image_ref,
-                "--metadata-file",
-                metadata_file.name,
-                "--push",
-                str(build_dir),
-            ],
-            cwd=ROOT,
-            check=True,
-        )
-        digest = pushed_digest(image_ref, Path(metadata_file.name))
+    with staged_build_context(example_dir, build_dir):
+        with tempfile.NamedTemporaryFile(prefix="example-image-", suffix=".json") as metadata_file:
+            subprocess.run(
+                [
+                    "docker",
+                    "buildx",
+                    "build",
+                    "--build-arg",
+                    f"IMAGE_VERSION={image_tag}",
+                    "--file",
+                    str(build_dir / "Dockerfile"),
+                    "--tag",
+                    image_ref,
+                    "--metadata-file",
+                    metadata_file.name,
+                    "--push",
+                    str(build_dir),
+                ],
+                cwd=ROOT,
+                check=True,
+            )
+            digest = pushed_digest(image_ref, Path(metadata_file.name))
 
     update_digest(contract_path, digest)
     print(f"Updated {contract_path.relative_to(ROOT)} to {digest}", flush=True)

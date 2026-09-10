@@ -207,7 +207,9 @@ marimo/_lsp/
 __marimo__/
 
 .idea/
-examples/*/artifact/*
 *.csv
-jobs/
+dev/
 db_password.txt
+!examples/*/build/
+!examples/*/build/**
+examples/*/build/.context/
