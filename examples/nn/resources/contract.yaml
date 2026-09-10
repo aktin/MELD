@@ -280,7 +280,7 @@ input_schema:
 
 
 output_schema:
-  format: "csv"
+  type: "csv"
   predictor:
     - name: "admitted"
       datatype: "Int64"
