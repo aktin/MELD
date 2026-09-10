@@ -222,8 +222,8 @@
             "csv"
           ]
         },
-        "predictor": {
-          "description": "Predictor columns of the result file, currently only one column supported, might be subject to change",
+        "labels": {
+          "description": "Label columns of the result file",
           "type": "array",
           "items": {
             "$ref": "#/$defs/feature"
