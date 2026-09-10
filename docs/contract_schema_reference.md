@@ -5,7 +5,6 @@
   - [2.1. Property `name`](#contract_name)
   - [2.2. Property `description`](#contract_description)
   - [2.3. Property `version`](#contract_version)
-  - [2.4. Property `id`](#contract_id)
 - [3. Property `runtime`](#runtime)
   - [3.1. Property `framework`](#runtime_framework)
   - [3.2. Property `image`](#runtime_image)
@@ -74,12 +73,11 @@
 
 **Description:** Inference runtime metadata
 
-| Property                                | Pattern | Type   | Deprecated | Definition | Title/Description                                                                        |
-| --------------------------------------- | ------- | ------ | ---------- | ---------- | ---------------------------------------------------------------------------------------- |
-| + [name](#contract_name )               | No      | string | No         | -          | Comprehensive descriptive name of the inference runtime                                  |
-| + [description](#contract_description ) | No      | string | No         | -          | Description of the inference runtime                                                     |
-| + [version](#contract_version )         | No      | string | No         | -          | Version of the inference runtime                                                         |
-| + [id](#contract_id )                   | No      | string | No         | -          | Unique identifier of the inference runtime, use alphanumeric characters and hyphens only |
+| Property                                | Pattern | Type   | Deprecated | Definition | Title/Description                                                           |
+| --------------------------------------- | ------- | ------ | ---------- | ---------- | --------------------------------------------------------------------------- |
+| + [name](#contract_name )               | No      | string | No         | -          | Name of the inference runtime, use alphanumeric characters and hyphens only |
+| + [description](#contract_description ) | No      | string | No         | -          | Description of the inference runtime                                        |
+| + [version](#contract_version )         | No      | string | No         | -          | Version of the inference runtime                                            |
 
 ### <a name="contract_name"></a>2.1. Property `name`
 
@@ -88,13 +86,19 @@
 | **Type**     | `string` |
 | **Required** | Yes      |
 
-**Description:** Comprehensive descriptive name of the inference runtime
+**Description:** Name of the inference runtime, use alphanumeric characters and hyphens only
 
 **Example:**
 
 ```yaml
-Emergency Department Heatwave Patient Encounter Prediction
+heatwave-patient-encounter
 ```
+
+| Restrictions                      |                                                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Min length**                    | 1                                                                                                                         |
+| **Max length**                    | 50                                                                                                                        |
+| **Must match regular expression** | ```^[a-z0-9-]+$``` [Test](https://regex101.com/?regex=%5E%5Ba-z0-9-%5D%2B%24&testString=%22heatwave-patient-encounter%22) |
 
 ### <a name="contract_description"></a>2.2. Property `description`
 
@@ -119,27 +123,6 @@ Emergency Department Heatwave Patient Encounter Prediction
 ```yaml
 1.0.0
 ```
-
-### <a name="contract_id"></a>2.4. Property `id`
-
-|              |          |
-| ------------ | -------- |
-| **Type**     | `string` |
-| **Required** | Yes      |
-
-**Description:** Unique identifier of the inference runtime, use alphanumeric characters and hyphens only
-
-**Example:**
-
-```yaml
-heatwave-patient-encounter
-```
-
-| Restrictions                      |                                                                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Min length**                    | 1                                                                                                                         |
-| **Max length**                    | 50                                                                                                                        |
-| **Must match regular expression** | ```^[a-z0-9-]+$``` [Test](https://regex101.com/?regex=%5E%5Ba-z0-9-%5D%2B%24&testString=%22heatwave-patient-encounter%22) |
 
 ## <a name="runtime"></a>3. Property `runtime`
 
@@ -597,4 +580,4 @@ Must be one of:
 | **Same definition as**    | [input_schema_features_items](#input_schema_features_items) |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-08-27 at 14:03:21 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-09-10 at 13:42:01 +0000
