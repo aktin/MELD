@@ -11,17 +11,18 @@ from docker.models.containers import Container
 
 import pandas as pd
 import yaml
+
 from ExecutionMonitor import ExecutionMonitor, Metrics
-from ModelEnvironment import (
-    JobContext,
-    JobStatus,
+from utils import get_unexpected_features, validate_feature_datatypes
+
+from .docker_runtime import (
     create_container,
     get_image_size,
     start_container,
     stop_container,
     wait_for_container,
 )
-from utils import get_unexpected_features, validate_feature_datatypes
+from .job_context import JobContext, JobStatus
 
 
 class InferenceRunner:
@@ -37,7 +38,10 @@ class InferenceRunner:
         """
         Runs inference on the provided input data using the configured runtime environment.
         """
-        self.job_context.log_event("Running inference", JobStatus.RUNNING)
+        archive_bytes = None
+
+        self.job_context.logger.info("Running inference")
+        self.job_context.set_status(JobStatus.RUNNING)
         self.monitor.update_metric_value(Metrics.INFERENCE_INPUT_ROW_COUNT, len(self.input_data.index))
         try:
             self.monitor.update_metric_value(Metrics.DOCKER_IMAGE_SIZE, get_image_size(self.image, self.job_context))
@@ -60,10 +64,12 @@ class InferenceRunner:
 
             if exit_code != 0:
                 error = f"Inference failed with exit code {exit_code}"
-                self.job_context.log_event(error, JobStatus.FAILED)
+                self.job_context.logger.error(error)
+                self.job_context.set_status(JobStatus.FAILED)
                 raise Exception(error)
             else:
-                self.job_context.log_event("Inference has completed successfully", JobStatus.SUCCESS)
+                self.job_context.logger.info("Inference has completed successfully")
+                self.job_context.set_status(JobStatus.SUCCESS)
 
             archived_output_data = self.get_output_data_from_container()
             archive_bytes = self.extract_result_file(archived_output_data)
@@ -77,10 +83,12 @@ class InferenceRunner:
         finally:
             self.pack_archive(archive_bytes)
 
-            return self.output_zip_path
+            self.job_context.logger.info("Inference execution completed")
+
+        return self.output_zip_path
 
 
-    def pack_archive(self, archive_bytes: bytes):
+    def pack_archive(self, archive_bytes: bytes | None):
         self.monitor.start_archive_packing_time()
         try:
             self.pack_result_file(archive_bytes)
@@ -126,7 +134,7 @@ class InferenceRunner:
             with open(os.path.join(self.job_context.input_data_path, "input.csv"), "w") as f:
                 f.write(input_csv)
             with open(os.path.join(self.job_context.input_data_path, "contract.yaml"), "w") as f:
-                yaml.dump(self.job_context.contract, f)
+                yaml.dump(self.job_context.contract.to_dict(), f)
 
             buf = io.BytesIO()
             # tar because docker.models.containers.Container.put_archive expects a tar archive as stream or bytes
@@ -137,11 +145,13 @@ class InferenceRunner:
             self.monitor.stop_input_data_copy_time()
         except APIError as e:
             error = "Failed to copy input data into runtime container"
-            self.job_context.log_event(error, JobStatus.FAILED, error=str(e))
+            self.job_context.logger.error(error)
+            self.job_context.set_status(JobStatus.FAILED)
             raise RuntimeError(error) from e
         except Exception as e:
             error = "Failed to copy input data into runtime container"
-            self.job_context.log_event(error, JobStatus.FAILED, error=str(e))
+            self.job_context.logger.error(error)
+            self.job_context.set_status(JobStatus.FAILED)
             raise RuntimeError(error) from e
 
     def extract_result_file(self, archive_bytes: io.BytesIO) -> bytes:
@@ -192,10 +202,7 @@ class InferenceRunner:
                     arcname = os.path.join("input", os.path.relpath(file_path, self.job_context.input_data_path))
                     out_zip.write(file_path, arcname)
 
-            for path, arcname in (
-                (self.job_context.logs_path, "logs"),
-                # (self.job_context.status_path, "status"),
-            ):
+            for path, arcname in ((self.job_context.logs_path, ""),):
                 if os.path.isdir(path):
                     for root, _, files in os.walk(path):
                         for file_name in files:
@@ -231,7 +238,7 @@ class InferenceRunner:
     def verify_result_data(self, output_df: pd.DataFrame) -> None:
         self.job_context.logger.info("Verifying result data")
 
-        predictors = self.job_context.contract["output_schema"]["predictor"]
+        predictors = self.job_context.contract.output_schema.predictor
 
         try:
             validate_feature_datatypes(output_df, predictors)

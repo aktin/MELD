@@ -1,5 +1,7 @@
 import sys
 import threading
+from collections.abc import Callable
+from typing import Any
 
 import docker
 import requests
@@ -7,7 +9,8 @@ from docker.errors import APIError, ImageNotFound, NotFound
 from docker.models.containers import Container
 
 from Logger import get_inference_logger, get_meld_logger
-from ModelEnvironment import JobContext, JobStatus
+
+from .job_context import JobContext, JobStatus
 
 client = docker.from_env()
 
@@ -44,13 +47,21 @@ def stream_container_logs(container: Container, job_context: JobContext) -> None
         job_context.logger.exception("Error while streaming container logs")
 
 
-def pull_image(image: str, ) -> None:
+def pull_image(
+    image: str,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    registry_api_key: str | None = None,
+) -> None:
     """
     Pulls a runtime image from the Docker registry.
 
     Parameters:
     image: str
         The name of the Docker image to pull, including the tag (if applicable).
+    progress_callback: Callable[[dict[str, Any]], None] | None
+        Optional callback invoked for each decoded Docker pull event.
+    registry_api_key: str | None
+        Optional one-off registry identity token for this pull request.
 
     Raises:
     RuntimeError
@@ -59,7 +70,26 @@ def pull_image(image: str, ) -> None:
     """
     try:
         logger.info(f"Pulling runtime image {image}")
-        client.images.pull(image)
+        auth_config = (
+            {"identitytoken": registry_api_key}
+            if registry_api_key
+            else None
+        )
+        if progress_callback is None:
+            if auth_config:
+                client.images.pull(image, auth_config=auth_config)
+            else:
+                client.images.pull(image)
+        else:
+            pull_kwargs: dict[str, Any] = {"stream": True, "decode": True}
+            if auth_config:
+                pull_kwargs["auth_config"] = auth_config
+            for event in client.api.pull(image, **pull_kwargs):
+                if "error" in event:
+                    error_detail = event.get("errorDetail") or {}
+                    message = error_detail.get("message") or event["error"]
+                    raise RuntimeError(message)
+                progress_callback(event)
         logger.info(f"Pulled runtime image {image}")
     except NotFound as e:
         error = f"Runtime image {image} not found"
@@ -112,16 +142,20 @@ def ensure_image_exists(job_context: JobContext) -> None:
     try:
         client.images.get(image)
 
-        job_context.log_event(
-            f"Runtime image {image} already pulled",
-            JobStatus.IMAGE_PULLED,
-            image=image,
-        )
+        job_context.logger.info(f"Runtime image {image} already pulled")
+        job_context.set_status(JobStatus.IMAGE_PULLED)
     except ImageNotFound as e:
         error = f"Runtime image {image} not found. Make sure to pull the image first."
-        job_context.log_event(error, JobStatus.FAILED, image=image)
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error) from e
 
+def image_exists(image: str) -> bool:
+    try:
+        client.images.get(image)
+        return True
+    except ImageNotFound:
+        return False
 
 def start_container(container: Container, job_context: JobContext, ) -> None:
     """
@@ -130,7 +164,7 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
     Parameters:
         container (Container): The container instance to be started.
         job_context (JobContext): The context of the job, including logging and
-            event handling.
+            status tracking.
 
     Raises:
         RuntimeError: If the container fails to start due to an API error, this
@@ -139,10 +173,12 @@ def start_container(container: Container, job_context: JobContext, ) -> None:
     try:
         job_context.logger.info(f"Starting runtime container {container.name}")
         container.start()
-        job_context.log_event("Started runtime container", JobStatus.RUNNING)
+        job_context.logger.info("Started runtime container")
+        job_context.set_status(JobStatus.RUNNING)
     except APIError as e:
         error = f"Failed to start runtime container"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e))
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error) from e
 
 
@@ -152,7 +188,7 @@ def wait_for_container(container: Container, job_context: JobContext, timeout_se
 
     Parameters:
         container (Container): The container whose execution is being monitored.
-        job_context (JobContext): The context of the job being executed, used for logging and event handling.
+        job_context (JobContext): The context of the job being executed, used for logging and status tracking.
         timeout_seconds (int): The maximum time, in seconds, to wait for the container to complete execution.
                                Defaults to 500 seconds.
 
@@ -176,14 +212,16 @@ def wait_for_container(container: Container, job_context: JobContext, timeout_se
 
         if exit_code != 0:
             error = f"Runtime container failed with exit code {exit_code}"
-            job_context.log_event("Inference failed", JobStatus.FAILED,
-                                  error=error)
+            job_context.logger.error(error)
+            job_context.set_status(JobStatus.FAILED)
             # raise RuntimeError(error)
         else:
-            job_context.log_event("Inference has completed successfully", JobStatus.SUCCESS)
+            job_context.logger.info("Inference has completed successfully")
+            job_context.set_status(JobStatus.SUCCESS)
     except requests.exceptions.ReadTimeout:
         error = f"Runtime container timed out after {timeout_seconds} seconds"
-        job_context.log_event(error, JobStatus.TIMEOUT, timeout=timeout_seconds)
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.TIMEOUT)
         container.kill()
         raise TimeoutError(error)
     finally:
@@ -214,7 +252,8 @@ def stop_container(container: Container, job_context: JobContext):
         job_context.logger.info(f"Stopped runtime container {container.name}")
     except APIError as e:
         error = f"Failed to stop runtime container"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e))
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error) from e
 
 
@@ -225,11 +264,12 @@ def destroy_container(container: Container, job_context: JobContext) -> None:
     Args:
         container (Container): The container object that needs to be destroyed.
         job_context (JobContext): The context of the job, which includes logging
-                                  and event tracking capabilities.
+                                  and status tracking capabilities.
     """
     job_context.logger.info(f"Destroying container {container.name}")
     container.remove()
-    job_context.log_event("Container destroyed", JobStatus.DESTROYED)
+    job_context.logger.info("Container destroyed")
+    job_context.set_status(JobStatus.DESTROYED)
 
 
 def create_container(image: str, job_context: JobContext, ) -> Container:
@@ -250,23 +290,23 @@ def create_container(image: str, job_context: JobContext, ) -> Container:
     """
     try:
         job_context.logger.info(f"Creating runtime container")
-        environment_variables = job_context.contract["runtime"].get("environment_variables", {})
+        environment_variables = job_context.contract.runtime.environment_variables or {}
         runtime_container = client.containers.create(image,
                                                      environment=environment_variables,
-                                                     name=f"runtime_{job_context.contract['contract']['id']}_{job_context.job_id}",
+                                                     name=f"runtime_{job_context.contract.id}_{job_context.job_id}",
                                                      )
-        job_context.log_event(f"Created runtime container {runtime_container.name}",
-                              JobStatus.CREATED,
-                              image=image,
-                              environment_variables=environment_variables, )
+        job_context.logger.info(f"Created runtime container {runtime_container.name}")
+        job_context.set_status(JobStatus.CREATED)
         return runtime_container
     except NotFound as e:
         error = f"Runtime image {image} not found"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error)
     except APIError as e:
         error = f"Failed to create container {image}"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error) from e
 
 
@@ -276,9 +316,11 @@ def get_image_size(image: str, job_context: JobContext,):
         return docker_image.attrs["Size"]
     except NotFound as e:
         error = f"Runtime image {image} not found"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error)
     except APIError as e:
         error = f"Failed to get image {image}"
-        job_context.log_event(error, JobStatus.FAILED, error=str(e), image=image)
+        job_context.logger.error(error)
+        job_context.set_status(JobStatus.FAILED)
         raise RuntimeError(error) from e

@@ -39,8 +39,7 @@
       "required": [
         "name",
         "description",
-        "version",
-        "id"
+        "version"
       ]
     },
     "runtime": {

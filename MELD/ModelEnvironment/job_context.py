@@ -4,8 +4,8 @@ import os
 from enum import Enum
 
 from Logger import get_job_logger
-from ModelManager import load_contract
-from utils import construct_image_ref
+from ModelManager import Contract
+from utils.config import ROOT_DIR
 
 
 class JobStatus(Enum):
@@ -38,8 +38,7 @@ class JobContext:
     Attributes:
         status (JobStatus): The current status of the job.
         container_status (str): The current status of the job container, if applicable.
-        contract_path (str): The file path to the job's contract.
-        contract (dict): The loaded job contract, including runtime and input schema configurations.
+        contract (Contract): The loaded job contract, including runtime and input schema configurations.
         job_id (str): A unique identifier for the job, generated based on the current timestamp.
         input_data_path (str): Path to the input data folder for the job.
         output_data_path (str): Path to the output data folder for the job.
@@ -48,12 +47,11 @@ class JobContext:
         logger (logging.Logger): The logger used for job-related logging.
     """
 
-    def __init__(self, contract_path: str):
+    def __init__(self, contract: Contract):
         self.status = None
         self.container_status = None
 
-        self.contract_path = contract_path
-        self.contract = load_contract(contract_path)
+        self.contract = contract
 
         self.job_id = self._create_job_id()
 
@@ -65,21 +63,12 @@ class JobContext:
         self.logs_path = self._create_log_folder()
 
         self.logger = get_job_logger(self.job_id, self.logs_path)
-        self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
-
-    @property
-    def contract_path(self):
-        return self._contract_path
-
-    @contract_path.setter
-    def contract_path(self, value):
-        self._contract_path = value
-        if not os.path.exists(value):
-            raise FileNotFoundError(f"Contract file {value} does not exist")
+        self.logger.info(f"Job {self.job_id} created")
+        self.set_status(JobStatus.PENDING)
 
     @property
     def image_ref(self):
-        return construct_image_ref(self.contract)
+        return self.contract.runtime.image.construct_image_ref()
 
     def _create_input_folder(self):
         input_path = os.path.join(self._job_folder, "input")
@@ -112,20 +101,17 @@ class JobContext:
         return job_folder
 
     def _create_job_id(self):
-        return f"{self.contract['contract']['id']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        return f"{self.contract.id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     def set_status(self, status: JobStatus):
-        self.status = status
-        with open(os.path.join(self.status_path, "status.json"), "w") as f:
-            json.dump({
-                "status": status.value,
-                "lastUpdated": datetime.datetime.now().isoformat(),
-                "jobId": self.job_id
-            }, f, sort_keys=True, indent=4)
-
-    def log_event(self, message: str, event: JobStatus, **kwargs):
-        self.logger.debug(message)
-        self.set_status(event)
+        pass
+        # self.status = status
+        # with open(os.path.join(self.status_path, "status.json"), "w") as f:
+        #     json.dump({
+        #         "status": status.value,
+        #         "lastUpdated": datetime.datetime.now().isoformat(),
+        #         "jobId": self.job_id
+        #     }, f, sort_keys=True, indent=4)
 
     def _create_status_folder(self):
         status_path = os.path.join(self._job_folder, "status")
@@ -157,11 +143,11 @@ class JobContext:
             str: The root path, either from the `MELD_ROOT_DIR` environment
             variable or the default value "/".
         """
-        return os.environ.get("MELD_ROOT_DIR", "/")
+        return ROOT_DIR
 
     @staticmethod
-    def create_job_context(contract_path: str):
-        context = JobContext(contract_path=contract_path)
+    def create_job_context(contract: Contract):
+        context = JobContext(contract=contract)
         return context
 
 class ContextProvider:

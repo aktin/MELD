@@ -2,6 +2,8 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
+from utils.config import LOG_DIR
+
 
 class NoTracebackFormatter(logging.Formatter):
     """
@@ -85,7 +87,7 @@ def get_meld_logger() -> logging.Logger:
     :return: A configured logger instance for the "meld" namespace.
     :rtype: logging.Logger
     """
-    return _setup_logger("meld", log_dir=os.environ.get("MELD_LOG_DIR", "/logs"), propagate=False, console=True)
+    return _setup_logger("meld", log_dir=LOG_DIR, propagate=False, console=True)
 
 def get_job_logger(job_id: str, log_path: str) -> logging.Logger:
     """
@@ -109,4 +111,4 @@ def get_inference_logger(job_id: str) -> logging.Logger:
     :return: A configured logger instance for the specified job's inference operations.
     :rtype: logging.Logger
     """
-    return _setup_logger(f"meld.job{job_id}.inference", propagate=True, console=True)
+    return _setup_logger(f"meld.job{job_id}.inference", propagate=True, console=False)

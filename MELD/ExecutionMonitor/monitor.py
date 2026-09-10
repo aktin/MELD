@@ -2,8 +2,9 @@ import datetime
 
 import __version__
 
-from ExecutionMonitor import Metrics
-from ModelEnvironment import ContextProvider
+from ModelEnvironment.job_context import ContextProvider
+
+from .metrics import Metrics
 
 
 class Timer:
@@ -31,13 +32,14 @@ class ExecutionMonitor:
         self.metrics: dict[Metrics, float | int | str] = {}
         self.timers: dict[Metrics, Timer] = {}
         self.update_metric_value(Metrics.JOB_ID, provider.get().job_id)
-        self.update_metric_value(Metrics.CONTRACT_ID, provider.get().contract["contract"]["id"])
-        self.update_metric_value(Metrics.CONTRACT_VERSION, provider.get().contract["contract"]["version"])
-        self.update_metric_value(Metrics.EXPECTED_FEATURE_COUNT, len(provider.get().contract["input_schema"]["features"]))
-        self.update_metric_value(Metrics.EXPECTED_PREDICTOR_COUNT, len(provider.get().contract["output_schema"]["predictor"]))
-        self.update_metric_value(Metrics.DOCKER_IMAGE_TAG, provider.get().contract["runtime"]["image"]["tag"])
-        self.update_metric_value(Metrics.DOCKER_IMAGE_NAME, provider.get().contract["runtime"]["image"]["name"])
-        self.update_metric_value(Metrics.DOCKER_IMAGE_DIGEST, provider.get().contract["runtime"]["image"]["digest"])
+        contract = provider.get().contract
+        self.update_metric_value(Metrics.CONTRACT_ID, contract.id)
+        self.update_metric_value(Metrics.CONTRACT_VERSION, contract.contract.version)
+        self.update_metric_value(Metrics.EXPECTED_FEATURE_COUNT, len(contract.input_schema.features))
+        self.update_metric_value(Metrics.EXPECTED_PREDICTOR_COUNT, len(contract.output_schema.predictor))
+        self.update_metric_value(Metrics.DOCKER_IMAGE_TAG, contract.runtime.image.tag)
+        self.update_metric_value(Metrics.DOCKER_IMAGE_NAME, contract.runtime.image.name)
+        self.update_metric_value(Metrics.DOCKER_IMAGE_DIGEST, contract.runtime.image.digest)
         self.update_metric_value(Metrics.ORCHESTRATOR_VERSION, __version__.version)
 
     def update_metric_value(self, metric: Metrics, value: float | int | str):

@@ -25,19 +25,20 @@ def validate_feature_datatypes(df: pd.DataFrame, features: list[dict]) -> None:
         feature contract.
     """
     for col in df.columns:
-        feature = next((f for f in features if f["name"] == col), None)
+        feature = next((f for f in features if _feature_value(f, "name") == col), None)
         if not feature:
             continue
 
-        if feature["datatype"].startswith("string") and not pd.api.types.is_string_dtype(df[col].dtype):
+        datatype = _feature_value(feature, "datatype")
+        if datatype.startswith("string") and not pd.api.types.is_string_dtype(df[col].dtype):
             raise ValueError(f"Column {col} is expected to be of type string, but is of type {df[col].dtype}")
-        elif feature["datatype"].startswith("int") and not pd.api.types.is_integer_dtype(df[col].dtype):
+        elif datatype.startswith("int") and not pd.api.types.is_integer_dtype(df[col].dtype):
             raise ValueError(f"Column {col} is expected to be of type integer, but is of type {df[col].dtype}")
-        elif feature["datatype"].startswith("float") and not pd.api.types.is_float_dtype(df[col].dtype):
+        elif datatype.startswith("float") and not pd.api.types.is_float_dtype(df[col].dtype):
             raise ValueError(f"Column {col} is expected to be of type float, but is of type {df[col].dtype}")
-        elif feature["datatype"].startswith("datetime") and not pd.api.types.is_datetime64_any_dtype(df[col].dtype):
+        elif datatype.startswith("datetime") and not pd.api.types.is_datetime64_any_dtype(df[col].dtype):
             raise ValueError(f"Column {col} is expected to be of type datetime, but is of type {df[col].dtype}")
-        elif feature["datatype"].startswith("boolean") and not pd.api.types.is_bool_dtype(df[col].dtype):
+        elif datatype.startswith("boolean") and not pd.api.types.is_bool_dtype(df[col].dtype):
             raise ValueError(f"Column {col} is expected to be of type boolean, but is of type {df[col].dtype}")
 
 
@@ -62,7 +63,11 @@ def validate_required_features(df: pd.DataFrame, features: list[dict]) -> None:
     ValueError
         If one or more required columns are missing from the DataFrame.
     """
-    required_cols = [f["name"] for f in features if f.get("required")]
+    required_cols = [
+        _feature_value(feature, "name")
+        for feature in features
+        if _feature_value(feature, "required", False)
+    ]
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         raise ValueError(f"Missing required columns: {', '.join(missing_cols)}")
@@ -72,7 +77,13 @@ def get_unexpected_features(df: pd.DataFrame, features: list[dict]) -> list[str]
     """
 
     """
-    feature_names = [f["name"] for f in features]
+    feature_names = [_feature_value(feature, "name") for feature in features]
     unexpected_cols = [col for col in df.columns if col not in feature_names]
 
     return unexpected_cols
+
+
+def _feature_value(feature, name: str, default=None):
+    if isinstance(feature, dict):
+        return feature.get(name, default)
+    return getattr(feature, name, default)

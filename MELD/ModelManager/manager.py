@@ -18,9 +18,8 @@ from ModelEnvironment import (
     pull_image,
     run_inference as run_runtime_inference,
 )
-from ModelManager import load_contract
+from .contract import Contract, Feature
 from utils import (
-    construct_image_ref,
     get_unexpected_features,
     validate_feature_datatypes,
     validate_required_features,
@@ -51,13 +50,13 @@ def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor)
     return data
 
 
-def run_inference(contract_path: str) -> None:
+def run_inference(contract: Contract) -> None:
     """
-    Run the inference workflow using the given contract file.
+    Run the inference workflow using the given contract.
 
     Parameters:
-    contract_path: str
-        Path to the contract file, default is "contract.yaml".
+    contract: Contract
+        Validated contract configuration.
 
     Raises:
     Exception
@@ -66,12 +65,13 @@ def run_inference(contract_path: str) -> None:
     Returns:
     None
     """
-    job_context = JobContext.create_job_context(contract_path)
+    job_context = JobContext.create_job_context(contract)
     provider = ContextProvider(job_context)
     monitor = ExecutionMonitor(provider)
     monitor.start_total_execution_time()
     try:
-        job_context.log_event("Preparing inference", JobStatus.PREPARING)
+        job_context.logger.info("Preparing inference")
+        job_context.set_status(JobStatus.PREPARING)
 
         ensure_image_exists(job_context)
 
@@ -96,16 +96,18 @@ def run_inference(contract_path: str) -> None:
         zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
         pack_metrics(zip_path, job_context, monitor)
 
+        job_context.logger.info(f"Output data saved to {zip_path[1:]}")
+
 
 def pack_metrics(path: str, job_context: JobContext, monitor: ExecutionMonitor) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
     """
-    job_context.logger.info("Packing result files")
+    job_context.logger.info("Packing monitoring files")
 
     mode = "a" if os.path.exists(path) else "w"
     with zipfile.ZipFile(path, mode=mode, compression=zipfile.ZIP_DEFLATED) as out_zip:
-        out_zip.writestr("/output/metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
+        out_zip.writestr("metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
 
 def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     """
@@ -119,13 +121,13 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
         tuple[datetime, datetime]: A tuple containing the start and end datetime
         objects representing the temporal window.
     """
-    scope = job_context.contract["input_schema"]["temporal_scope"]
-    if scope["type"] == "absolute":
-        start = datetime.fromisoformat(scope["start"])
-        end = datetime.fromisoformat(scope["end"])
+    scope = job_context.contract.input_schema.temporal_scope
+    if scope.type == "absolute":
+        start = datetime.fromisoformat(scope.start)
+        end = datetime.fromisoformat(scope.end)
     else:
-        anchor = scope.get("anchor")
-        duration = scope.get("value")
+        anchor = scope.anchor
+        duration = scope.value
 
         # force absolute value duration gets subtracted from anchor, negative values would add to anchor and cause that start > end
         duration = duration[1:] if duration.startswith("-") else duration
@@ -142,13 +144,13 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     return start, end
 
 
-def pull_runtime(contract_path):
+def pull_runtime(contract: Contract) -> None:
     """
-    Pulls a runtime image based on the specified contract file.
+    Pulls a runtime image based on the specified contract.
 
     Parameters:
-    contract_path: str
-        The file path to the contract that specifies the runtime information.
+    contract: Contract
+        The contract that specifies the runtime information.
 
     Raises:
     Exception
@@ -156,32 +158,32 @@ def pull_runtime(contract_path):
         pulling process.
     """
     try:
-        image = construct_image_ref(load_contract(contract_path))
+        image = contract.runtime.image.construct_image_ref()
         pull_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime pull: {e}")
 
 
-def remove_runtime(contract_path):
+def remove_runtime(contract: Contract) -> None:
     """
     Removes the runtime associated with a given contract.
 
     Args:
-        contract_path (str): The file path to the contract.
+        contract (Contract): The contract specifying the runtime image.
 
     Raises:
         Exception: If an error occurs during image construction or
         deletion, it is caught and logged.
     """
     try:
-        image = construct_image_ref(load_contract(contract_path))
+        image = contract.runtime.image.construct_image_ref()
         delete_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime removal: {e}")
 
 
 
-def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
+def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[Feature]:
     """
     Validates the presence of required feature columns in a given dataframe against the input schema.
 
@@ -192,15 +194,15 @@ def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
         The context that includes the contract and logger configuration.
 
     Returns:
-    list[str]
-        A list of required feature column names.
+    list[Feature]
+        The validated contract features.
 
     Raises:
     ValueError
         If the required feature columns are missing from the dataframe.
     """
     job_context.logger.info(f"Validating features")
-    features = job_context.contract["input_schema"]["features"]
+    features = job_context.contract.input_schema.features
 
     validate_required_features(df, features)
 
@@ -213,7 +215,7 @@ def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
     return features
 
 
-def _normalize_features(df: pd.DataFrame, feature_cols: list[dict]) -> pd.DataFrame:
+def _normalize_features(df: pd.DataFrame, feature_cols: list[Feature]) -> pd.DataFrame:
     """
     Normalizes the specified feature columns in the provided DataFrame.
 
@@ -228,7 +230,7 @@ def _normalize_features(df: pd.DataFrame, feature_cols: list[dict]) -> pd.DataFr
         A new DataFrame where the specified feature columns are normalized
         according to their data types.
     """
-    feature_names = [f["name"] for f in feature_cols]
+    feature_names = [feature.name for feature in feature_cols]
     x = df[feature_names].copy()
 
     for col in x.columns:

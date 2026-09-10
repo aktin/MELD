@@ -1,32 +1,19 @@
-import json
-import os
-
-from jsonschema import validate
+from typing import TextIO
 
 from Logger import get_meld_logger
-from utils import load_yaml
+
+from .contract import Contract
 
 logger = get_meld_logger()
 
 
-def load_contract(path: str) -> dict:
+def load_contract(source: str | TextIO) -> Contract:
     """
     Loads a contract from the specified YAML file path.
 
-    :param path: The file path to the YAML file containing the contract definition.
-    :type path: str
+    :param source: The YAML file path or an open text stream.
     :return: The contract data loaded from the specified YAML file.
     :rtype: Any
     """
-    logger.debug(f"Loading contract from {path}")
-    contract = load_yaml(path)
-
-    _validate_contract(contract)
-
-    return contract
-
-def _validate_contract(contract: dict):
-    with open(os.path.join(os.path.dirname(__file__), "../resources/contract.schema.json"), "r") as f:
-        schema = json.load(f)
-
-    validate(contract, schema)
+    logger.debug("Loading contract from %s", source)
+    return Contract.from_yaml(source)
