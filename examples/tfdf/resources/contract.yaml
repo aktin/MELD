@@ -1,5 +1,4 @@
 contract:
-  id: "stationary-admission-test-tfdf"
   name: "stationary-admission-test-tfdf"
   description: "stationary-admission-test-tfdf"
   version: "0.1.0"
@@ -7,8 +6,8 @@ contract:
 runtime:
   framework: "tensorflow-tfdf"
   image:
-    name: "ghcr.io/simhue/meld/runtime_examples/tfdf"
-    tag: "0.1.1-SNAPSHOT"
+    name: "ghcr.io/aktin/meld-runtime-examples-tfdf"
+    tag: "1.0.0"
     digest: "sha256:d7a0d999b4647543f72ceab7d07a2cd09e7c07ef497a4bb1aa3a765ebac36a9e"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
