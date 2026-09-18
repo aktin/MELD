@@ -22,13 +22,13 @@ from .docker_runtime import (
     stop_container,
     wait_for_container,
 )
-from .job_context import JobContext, JobStatus
+from .execution_context import ExecutionContext, ExecutionStatus
 
 
 class InferenceRunner:
-    def __init__(self, input_data: pd.DataFrame, job_context: JobContext, monitor: ExecutionMonitor):
+    def __init__(self, input_data: pd.DataFrame, job_context: ExecutionContext, monitor: ExecutionMonitor):
         self.input_data = input_data
-        self.job_context: JobContext = job_context
+        self.job_context: ExecutionContext = job_context
         self.monitor: ExecutionMonitor = monitor
         self.image = job_context.image_ref
         self.output_zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
@@ -41,7 +41,10 @@ class InferenceRunner:
         archive_bytes = None
 
         self.job_context.logger.info("Running inference")
-        self.job_context.set_status(JobStatus.RUNNING)
+        if self._cancel_requested():
+            return self.output_zip_path
+
+        self.job_context.set_status(ExecutionStatus.RUNNING)
         self.monitor.update_metric_value(Metrics.INFERENCE_INPUT_ROW_COUNT, len(self.input_data.index))
         try:
             self.monitor.update_metric_value(Metrics.DOCKER_IMAGE_SIZE, get_image_size(self.image, self.job_context))
@@ -51,10 +54,17 @@ class InferenceRunner:
             self.create_interface_folders()
             self.copy_data_to_container()
 
+            if self._cancel_requested():
+                return self.output_zip_path
+
             self.monitor.start_inference_time()
             start_container(self.runtime_container, self.job_context)
+            self.job_context.set_cancel_callback(self._stop_runtime_container)
 
             exit_code = wait_for_container(self.runtime_container, self.job_context)
+
+            if self._cancel_requested():
+                return self.output_zip_path
 
             stop_container(self.runtime_container, self.job_context)
             timespan = self.monitor.stop_inference_time()
@@ -65,11 +75,10 @@ class InferenceRunner:
             if exit_code != 0:
                 error = f"Inference failed with exit code {exit_code}"
                 self.job_context.logger.error(error)
-                self.job_context.set_status(JobStatus.FAILED)
                 raise Exception(error)
             else:
                 self.job_context.logger.info("Inference has completed successfully")
-                self.job_context.set_status(JobStatus.SUCCESS)
+                self.job_context.set_status(ExecutionStatus.SUCCESS)
 
             archived_output_data = self.get_output_data_from_container()
             archive_bytes = self.extract_result_file(archived_output_data)
@@ -80,12 +89,29 @@ class InferenceRunner:
 
         except Exception as e:
             self.job_context.logger.exception(f"An exception occurred during inference: {e}")
+            raise
         finally:
-            self.pack_archive(archive_bytes)
-
-            self.job_context.logger.info("Inference execution completed")
+            try:
+                self.pack_archive(archive_bytes)
+            finally:
+                self.job_context.set_cancel_callback(None)
+                if self._cancel_requested():
+                    self.job_context.set_status(ExecutionStatus.CANCELED)
+                self.job_context.logger.info("Inference execution completed")
 
         return self.output_zip_path
+
+    def _cancel_requested(self) -> bool:
+        return self.job_context.cancel_requested
+
+    def _stop_runtime_container(self) -> None:
+        if self.runtime_container is None:
+            return
+
+        try:
+            stop_container(self.runtime_container, self.job_context)
+        except Exception:
+            self.job_context.logger.exception("Failed to stop canceled runtime container")
 
 
     def pack_archive(self, archive_bytes: bytes | None):
@@ -146,12 +172,12 @@ class InferenceRunner:
         except APIError as e:
             error = "Failed to copy input data into runtime container"
             self.job_context.logger.error(error)
-            self.job_context.set_status(JobStatus.FAILED)
+            self.job_context.set_status(ExecutionStatus.FAILED)
             raise RuntimeError(error) from e
         except Exception as e:
             error = "Failed to copy input data into runtime container"
             self.job_context.logger.error(error)
-            self.job_context.set_status(JobStatus.FAILED)
+            self.job_context.set_status(ExecutionStatus.FAILED)
             raise RuntimeError(error) from e
 
     def extract_result_file(self, archive_bytes: io.BytesIO) -> bytes:
@@ -188,7 +214,8 @@ class InferenceRunner:
         self.job_context.logger.info("Packing result files")
 
         with zipfile.ZipFile(self.output_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as out_zip:
-            out_zip.writestr("output/output.csv", extracted_file)
+            if extracted_file is not None:
+                out_zip.writestr("output/output.csv", extracted_file)
 
     def pack_metadata_and_logs(self) -> None:
         """
@@ -265,5 +292,5 @@ class InferenceRunner:
         self.monitor.update_metric_value(Metrics.INFERENCE_RESULT_ROW_COUNT, len(output_df.index))
 
 
-def run_inference(input_data: pd.DataFrame, job_context: JobContext, monitor: ExecutionMonitor) -> str | None:
+def run_inference(input_data: pd.DataFrame, job_context: ExecutionContext, monitor: ExecutionMonitor) -> str | None:
     return InferenceRunner(input_data, job_context, monitor).run()

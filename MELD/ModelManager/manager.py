@@ -11,14 +11,14 @@ from InternalDataLoader import execute_query
 from Logger import get_meld_logger
 from ModelEnvironment import (
     ContextProvider,
-    JobContext,
-    JobStatus,
+    ExecutionContext,
+    ExecutionStatus,
     delete_image,
     ensure_image_exists,
     pull_image,
     run_inference as run_runtime_inference,
 )
-from .contract import Contract, Feature
+from .contract_models import Contract, Feature
 from utils import (
     get_unexpected_features,
     validate_feature_datatypes,
@@ -28,7 +28,7 @@ from utils import (
 logger = get_meld_logger()
 
 
-def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor) -> pd.DataFrame:
+def query_data(job_context: ExecutionContext, params: dict, monitor: ExecutionMonitor) -> pd.DataFrame:
     """
     Executes a SQL query and returns the resulting data as a DataFrame.
 
@@ -42,15 +42,21 @@ def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor)
     A pandas DataFrame containing the query results.
     """
     job_context.logger.info(f"Executing query")
+    job_context.set_status(ExecutionStatus.START_QUERY)
     monitor.start_query_execution_time()
-    data = execute_query(job_context, params)
+    try:
+        data = execute_query(job_context, params)
+    except Exception:
+        job_context.set_status(ExecutionStatus.FAILED)
+        raise
+    job_context.set_status(ExecutionStatus.QUERY_FINISHED)
     timespan = monitor.stop_query_execution_time()
     monitor.update_metric_value(Metrics.QUERY_RESULT_ROW_COUNT, len(data))
     job_context.logger.info(f"Query returned {len(data)} rows and took {timespan.total_seconds():.3f} seconds.")
     return data
 
 
-def run_inference(contract: Contract) -> None:
+def run_inference(contract: Contract, ctx: ExecutionContext = None) -> None:
     """
     Run the inference workflow using the given contract.
 
@@ -65,41 +71,49 @@ def run_inference(contract: Contract) -> None:
     Returns:
     None
     """
-    job_context = JobContext.create_job_context(contract)
-    provider = ContextProvider(job_context)
+    ctx = ExecutionContext.create(contract) if not ctx else ctx
+    provider = ContextProvider(ctx)
     monitor = ExecutionMonitor(provider)
     monitor.start_total_execution_time()
     try:
-        job_context.logger.info("Preparing inference")
-        job_context.set_status(JobStatus.PREPARING)
+        ctx.logger.info("Preparing inference")
+        ctx.set_status(ExecutionStatus.PREPARING)
 
-        ensure_image_exists(job_context)
+        ensure_image_exists(ctx)
+        if ctx.cancel_requested:
+            return
 
-        start, end = _compute_time_window(job_context)
+        start, end = _compute_time_window(ctx)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        df = query_data(job_context, params, monitor)
+        df = query_data(ctx, params, monitor)
+        if ctx.cancel_requested:
+            return
 
         monitor.start_feature_computation_time()
         try:
-            feature_cols = _validate_features(df, job_context)
+            feature_cols = _validate_features(df, ctx)
             x = _normalize_features(df, feature_cols)
         finally:
             monitor.stop_feature_computation_time()
 
-        run_runtime_inference(x, job_context, monitor)
+        run_runtime_inference(x, ctx, monitor)
     except Exception as e:
-        job_context.logger.exception(f"An exception occurred during inference: {e}")
+        ctx.set_status(ExecutionStatus.FAILED)
+        ctx.logger.exception(f"An exception occurred during inference: {e}")
     finally:
         monitor.stop_total_execution_time()
 
-        zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
-        pack_metrics(zip_path, job_context, monitor)
+        zip_path = os.path.join(ctx.output_data_path, "summarized_execution.zip")
+        pack_metrics(zip_path, ctx, monitor)
 
-        job_context.logger.info(f"Output data saved to {zip_path[1:]}")
+        if ctx.cancel_requested:
+            ctx.set_status(ExecutionStatus.CANCELED)
+
+        ctx.logger.info(f"Output data saved to {zip_path[1:]}")
 
 
-def pack_metrics(path: str, job_context: JobContext, monitor: ExecutionMonitor) -> None:
+def pack_metrics(path: str, job_context: ExecutionContext, monitor: ExecutionMonitor) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
     """
@@ -109,12 +123,12 @@ def pack_metrics(path: str, job_context: JobContext, monitor: ExecutionMonitor) 
     with zipfile.ZipFile(path, mode=mode, compression=zipfile.ZIP_DEFLATED) as out_zip:
         out_zip.writestr("metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
 
-def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
+def _compute_time_window(job_context: ExecutionContext) -> tuple[datetime, datetime]:
     """
     Compute the temporal window based on the input schema's temporal scope.
 
     Args:
-        job_context (JobContext): The context of the job containing the contract
+        job_context (ExecutionContext): The context of the job containing the contract
         metadata, which includes the temporal scope specifications.
 
     Returns:
@@ -183,7 +197,7 @@ def remove_runtime(contract: Contract) -> None:
 
 
 
-def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[Feature]:
+def _validate_features(df: pd.DataFrame, job_context: ExecutionContext) -> list[Feature]:
     """
     Validates the presence of required feature columns in a given dataframe against the input schema.
 

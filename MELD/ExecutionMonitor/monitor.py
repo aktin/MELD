@@ -2,7 +2,7 @@ import datetime
 
 import __version__
 
-from ModelEnvironment.job_context import ContextProvider
+from ModelEnvironment.execution_context import ContextProvider
 
 from .metrics import Metrics
 
@@ -31,7 +31,7 @@ class ExecutionMonitor:
     def __init__(self, provider: ContextProvider):
         self.metrics: dict[Metrics, float | int | str] = {}
         self.timers: dict[Metrics, Timer] = {}
-        self.update_metric_value(Metrics.JOB_ID, provider.get().job_id)
+        self.update_metric_value(Metrics.JOB_ID, provider.get().execution_id)
         contract = provider.get().contract
         self.update_metric_value(Metrics.CONTRACT_ID, contract.id)
         self.update_metric_value(Metrics.CONTRACT_VERSION, contract.contract.version)

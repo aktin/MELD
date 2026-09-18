@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from .job_context import ContextProvider, JobContext, JobStatus
+from .execution_context import ContextProvider, ExecutionContext, ExecutionStatus
+from .execution_service import ExecutionService
 
 __all__ = [
     "ContextProvider",
-    "JobContext",
-    "JobStatus",
+    "ExecutionContext",
+    "ExecutionStatus",
     "InferenceRunner",
     "create_container",
     "delete_image",

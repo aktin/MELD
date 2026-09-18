@@ -4,12 +4,12 @@ import pandas as pd
 from pandas import DataFrame
 from sqlalchemy import text
 
-from ModelEnvironment.job_context import JobContext
+from ModelEnvironment.execution_context import ExecutionContext
 
 from .db import engine
 
 
-def execute_query(job_context: JobContext, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:
+def execute_query(job_context: ExecutionContext, params: dict | None = None) -> DataFrame | Iterator[DataFrame]:
     """
     Executes a SQL query and retrieves the result as a DataFrame or an iterator of DataFrames.
 
