@@ -1,0 +1,31 @@
+contract:
+  name: wait-runtime
+  description: Test contract for a runtime that waits before producing an empty result.
+  version: "0.1.0"
+
+runtime:
+  framework: test
+  image:
+    name: ghcr.io/simhue/meld/runtime_examples/wait
+    tag: "0.1.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  environment_variables:
+    WAIT_SECONDS: "5"
+
+input_schema:
+  temporal_scope:
+    type: relative
+    value: P1D
+    anchor: "2020-01-01T00:00:00Z"
+  features:
+    - name: ignored
+      datatype: string
+  query:
+    type: sql
+    statement: SELECT 'ignored' AS ignored
+
+output_schema:
+  type: csv
+  predictor:
+    - name: result
+      datatype: string

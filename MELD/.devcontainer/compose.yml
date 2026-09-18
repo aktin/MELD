@@ -1,0 +1,22 @@
+services:
+  meld:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - DB_PASSWORD_FILE=/run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+
+secrets:
+  postgres_password:
+    file: ./db_password.txt

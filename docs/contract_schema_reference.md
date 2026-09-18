@@ -580,4 +580,4 @@ Must be one of:
 | **Same definition as**    | [input_schema_features_items](#input_schema_features_items) |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-09-10 at 13:42:01 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-09-18 at 14:13:12 +0000

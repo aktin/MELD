@@ -1,19 +1,23 @@
 from __future__ import annotations
 
-from .job_context import ContextProvider, JobContext, JobStatus
+from .execution_context import ContextProvider, ExecutionContext, ExecutionStatus
+from .execution_service import ExecutionService
 
 __all__ = [
     "ContextProvider",
-    "JobContext",
-    "JobStatus",
+    "ExecutionContext",
+    "ExecutionStatus",
     "InferenceRunner",
     "create_container",
     "delete_image",
+    "destroy_container",
     "ensure_image_exists",
     "get_image_size",
+    "image_exists",
     "pull_image",
     "run_inference",
     "start_container",
+    "stream_container_logs",
     "stop_container",
     "wait_for_container",
 ]
@@ -22,9 +26,12 @@ _INFERENCE_EXPORTS = {"InferenceRunner", "run_inference"}
 _RUNTIME_EXPORTS = {
     "create_container",
     "delete_image",
+    "destroy_container",
     "ensure_image_exists",
     "get_image_size",
+    "image_exists",
     "pull_image",
+    "stream_container_logs",
     "start_container",
     "stop_container",
     "wait_for_container",

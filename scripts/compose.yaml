@@ -1,6 +1,11 @@
 services:
   meld:
     image: ghcr.io/simhue/meld-orchestrator:0.2.1-SNAPSHOT
+    # Match the host Docker socket group so the non-root meld user can use Docker.
+    # Set DOCKER_SOCKET_GID before starting Compose:
+    # export DOCKER_SOCKET_GID="$(stat -c '%g' /var/run/docker.sock)"
+#    group_add:
+#      - "${DOCKER_SOCKET_GID:?Set DOCKER_SOCKET_GID to the Docker socket GID}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -9,15 +14,17 @@ services:
       - DB_USER=${DB_USER}
       - DB_SCHEMA=${DB_SCHEMA}
       - DB_PASSWORD_FILE=/run/secrets/postgres_password
+      - TZ=${TZ:-Europe/Berlin}
+    restart: unless-stopped
     secrets:
       - postgres_password
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "${MELD_LOG_DIR:-./logs}:/logs"
+      - "./logs/:/logs/"
       - "./jobs/:/jobs/"
-      - "${MELD_CONTRACT_FILE:-./contract.yaml}:/resources/contract.yaml:ro"
-      - "${MELD_QUERY_FILE:-./query.sql}:/resources/query.sql:ro"
-      - "~/.docker:/root/.docker:ro" # for ghcr authentication when logged in on host
+      - "./contracts/:/contracts/:ro"
+      - "~/.docker:/home/meld/.docker:ro" # for ghcr authentication when logged in on host
+    privileged: false
 
 
 secrets:

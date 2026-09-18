@@ -11,16 +11,15 @@ from InternalDataLoader import execute_query
 from Logger import get_meld_logger
 from ModelEnvironment import (
     ContextProvider,
-    JobContext,
-    JobStatus,
+    ExecutionContext,
+    ExecutionStatus,
     delete_image,
     ensure_image_exists,
     pull_image,
     run_inference as run_runtime_inference,
 )
-from ModelManager import load_contract
+from .contract_models import Contract, Feature
 from utils import (
-    construct_image_ref,
     get_unexpected_features,
     validate_feature_datatypes,
     validate_required_features,
@@ -29,7 +28,7 @@ from utils import (
 logger = get_meld_logger()
 
 
-def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor) -> pd.DataFrame:
+def query_data(job_context: ExecutionContext, params: dict, monitor: ExecutionMonitor) -> pd.DataFrame:
     """
     Executes a SQL query and returns the resulting data as a DataFrame.
 
@@ -43,21 +42,27 @@ def query_data(job_context: JobContext, params: dict, monitor: ExecutionMonitor)
     A pandas DataFrame containing the query results.
     """
     job_context.logger.info(f"Executing query")
+    job_context.set_status(ExecutionStatus.START_QUERY)
     monitor.start_query_execution_time()
-    data = execute_query(job_context, params)
+    try:
+        data = execute_query(job_context, params)
+    except Exception:
+        job_context.set_status(ExecutionStatus.FAILED)
+        raise
+    job_context.set_status(ExecutionStatus.QUERY_FINISHED)
     timespan = monitor.stop_query_execution_time()
     monitor.update_metric_value(Metrics.QUERY_RESULT_ROW_COUNT, len(data))
     job_context.logger.info(f"Query returned {len(data)} rows and took {timespan.total_seconds():.3f} seconds.")
     return data
 
 
-def run_inference(contract_path: str) -> None:
+def run_inference(contract: Contract, ctx: ExecutionContext = None) -> None:
     """
-    Run the inference workflow using the given contract file.
+    Run the inference workflow using the given contract.
 
     Parameters:
-    contract_path: str
-        Path to the contract file, default is "contract.yaml".
+    contract: Contract
+        Validated contract configuration.
 
     Raises:
     Exception
@@ -66,66 +71,77 @@ def run_inference(contract_path: str) -> None:
     Returns:
     None
     """
-    job_context = JobContext.create_job_context(contract_path)
-    provider = ContextProvider(job_context)
+    ctx = ExecutionContext.create(contract) if not ctx else ctx
+    provider = ContextProvider(ctx)
     monitor = ExecutionMonitor(provider)
     monitor.start_total_execution_time()
     try:
-        job_context.log_event("Preparing inference", JobStatus.PREPARING)
+        ctx.logger.info("Preparing inference")
+        ctx.set_status(ExecutionStatus.PREPARING)
 
-        ensure_image_exists(job_context)
+        ensure_image_exists(ctx)
+        if ctx.cancel_requested:
+            return
 
-        start, end = _compute_time_window(job_context)
+        start, end = _compute_time_window(ctx)
         params = {"start": start.isoformat(), "end": end.isoformat()}
 
-        df = query_data(job_context, params, monitor)
+        df = query_data(ctx, params, monitor)
+        if ctx.cancel_requested:
+            return
 
         monitor.start_feature_computation_time()
         try:
-            feature_cols = _validate_features(df, job_context)
+            feature_cols = _validate_features(df, ctx)
             x = _normalize_features(df, feature_cols)
         finally:
             monitor.stop_feature_computation_time()
 
-        run_runtime_inference(x, job_context, monitor)
+        run_runtime_inference(x, ctx, monitor)
     except Exception as e:
-        job_context.logger.exception(f"An exception occurred during inference: {e}")
+        ctx.set_status(ExecutionStatus.FAILED)
+        ctx.logger.exception(f"An exception occurred during inference: {e}")
     finally:
         monitor.stop_total_execution_time()
 
-        zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
-        pack_metrics(zip_path, job_context, monitor)
+        zip_path = os.path.join(ctx.output_data_path, "summarized_execution.zip")
+        pack_metrics(zip_path, ctx, monitor)
+
+        if ctx.cancel_requested:
+            ctx.set_status(ExecutionStatus.CANCELED)
+
+        ctx.logger.info(f"Output data saved to {zip_path[1:]}")
 
 
-def pack_metrics(path: str, job_context: JobContext, monitor: ExecutionMonitor) -> None:
+def pack_metrics(path: str, job_context: ExecutionContext, monitor: ExecutionMonitor) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
     """
-    job_context.logger.info("Packing result files")
+    job_context.logger.info("Packing monitoring files")
 
     mode = "a" if os.path.exists(path) else "w"
     with zipfile.ZipFile(path, mode=mode, compression=zipfile.ZIP_DEFLATED) as out_zip:
-        out_zip.writestr("/output/metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
+        out_zip.writestr("metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
 
-def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
+def _compute_time_window(job_context: ExecutionContext) -> tuple[datetime, datetime]:
     """
     Compute the temporal window based on the input schema's temporal scope.
 
     Args:
-        job_context (JobContext): The context of the job containing the contract
+        job_context (ExecutionContext): The context of the job containing the contract
         metadata, which includes the temporal scope specifications.
 
     Returns:
         tuple[datetime, datetime]: A tuple containing the start and end datetime
         objects representing the temporal window.
     """
-    scope = job_context.contract["input_schema"]["temporal_scope"]
-    if scope["type"] == "absolute":
-        start = datetime.fromisoformat(scope["start"])
-        end = datetime.fromisoformat(scope["end"])
+    scope = job_context.contract.input_schema.temporal_scope
+    if scope.type == "absolute":
+        start = datetime.fromisoformat(scope.start)
+        end = datetime.fromisoformat(scope.end)
     else:
-        anchor = scope.get("anchor")
-        duration = scope.get("value")
+        anchor = scope.anchor
+        duration = scope.value
 
         # force absolute value duration gets subtracted from anchor, negative values would add to anchor and cause that start > end
         duration = duration[1:] if duration.startswith("-") else duration
@@ -142,13 +158,13 @@ def _compute_time_window(job_context: JobContext) -> tuple[datetime, datetime]:
     return start, end
 
 
-def pull_runtime(contract_path):
+def pull_runtime(contract: Contract) -> None:
     """
-    Pulls a runtime image based on the specified contract file.
+    Pulls a runtime image based on the specified contract.
 
     Parameters:
-    contract_path: str
-        The file path to the contract that specifies the runtime information.
+    contract: Contract
+        The contract that specifies the runtime information.
 
     Raises:
     Exception
@@ -156,32 +172,32 @@ def pull_runtime(contract_path):
         pulling process.
     """
     try:
-        image = construct_image_ref(load_contract(contract_path))
+        image = contract.runtime.image.construct_image_ref()
         pull_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime pull: {e}")
 
 
-def remove_runtime(contract_path):
+def remove_runtime(contract: Contract) -> None:
     """
     Removes the runtime associated with a given contract.
 
     Args:
-        contract_path (str): The file path to the contract.
+        contract (Contract): The contract specifying the runtime image.
 
     Raises:
         Exception: If an error occurs during image construction or
         deletion, it is caught and logged.
     """
     try:
-        image = construct_image_ref(load_contract(contract_path))
+        image = contract.runtime.image.construct_image_ref()
         delete_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime removal: {e}")
 
 
 
-def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
+def _validate_features(df: pd.DataFrame, job_context: ExecutionContext) -> list[Feature]:
     """
     Validates the presence of required feature columns in a given dataframe against the input schema.
 
@@ -192,15 +208,15 @@ def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
         The context that includes the contract and logger configuration.
 
     Returns:
-    list[str]
-        A list of required feature column names.
+    list[Feature]
+        The validated contract features.
 
     Raises:
     ValueError
         If the required feature columns are missing from the dataframe.
     """
     job_context.logger.info(f"Validating features")
-    features = job_context.contract["input_schema"]["features"]
+    features = job_context.contract.input_schema.features
 
     validate_required_features(df, features)
 
@@ -213,7 +229,7 @@ def _validate_features(df: pd.DataFrame, job_context: JobContext) -> list[dict]:
     return features
 
 
-def _normalize_features(df: pd.DataFrame, feature_cols: list[dict]) -> pd.DataFrame:
+def _normalize_features(df: pd.DataFrame, feature_cols: list[Feature]) -> pd.DataFrame:
     """
     Normalizes the specified feature columns in the provided DataFrame.
 
@@ -228,7 +244,7 @@ def _normalize_features(df: pd.DataFrame, feature_cols: list[dict]) -> pd.DataFr
         A new DataFrame where the specified feature columns are normalized
         according to their data types.
     """
-    feature_names = [f["name"] for f in feature_cols]
+    feature_names = [feature.name for feature in feature_cols]
     x = df[feature_names].copy()
 
     for col in x.columns:

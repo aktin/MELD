@@ -1,16 +1,17 @@
 import datetime
 import json
 import os
+import threading
+from collections.abc import Callable
 from enum import Enum
 
 from Logger import get_job_logger
-from ModelManager import load_contract
-from utils import construct_image_ref
+from ModelManager.contract_models import Contract
+from utils.config import ROOT_DIR, CONTRACTS_DIR
+from utils.utils import read_contract
 
 
-class JobStatus(Enum):
-    DELETING_IMAGE = "DELETING_IMAGE"
-    IMAGE_DELETED = "IMAGE_DELETED"
+class ExecutionStatus(Enum):
     QUERY_FINISHED = "QUERY_FINISHED"
     START_QUERY = "START_QUERY"
     PENDING = "PENDING"
@@ -21,12 +22,9 @@ class JobStatus(Enum):
     FAILED = "FAILED"
     CANCELED = "CANCELED"
     TIMEOUT = "TIMEOUT"
-    DESTROYED = "DESTROYED"
-    PULLING_IMAGE = "PULLING_IMAGE"
-    IMAGE_PULLED = "IMAGE_PULLED"
 
 
-class JobContext:
+class ExecutionContext:
     """
     Represents a job context within the application.
 
@@ -36,11 +34,9 @@ class JobContext:
     and other job-specific parameters.
 
     Attributes:
-        status (JobStatus): The current status of the job.
-        container_status (str): The current status of the job container, if applicable.
-        contract_path (str): The file path to the job's contract.
-        contract (dict): The loaded job contract, including runtime and input schema configurations.
-        job_id (str): A unique identifier for the job, generated based on the current timestamp.
+        status (ExecutionStatus): The current status of the job.
+        contract (Contract): The loaded job contract, including runtime and input schema configurations.
+        execution_id (str): A unique identifier for the job, generated based on the current timestamp.
         input_data_path (str): Path to the input data folder for the job.
         output_data_path (str): Path to the output data folder for the job.
         status_path (str): Path to the status folder for the job.
@@ -48,14 +44,15 @@ class JobContext:
         logger (logging.Logger): The logger used for job-related logging.
     """
 
-    def __init__(self, contract_path: str):
+    def __init__(self, contract: Contract, execution_id: str = None):
         self.status = None
-        self.container_status = None
+        self._cancel_event = threading.Event()
+        self._cancel_callback: Callable[[], None] | None = None
+        self._cancel_lock = threading.Lock()
 
-        self.contract_path = contract_path
-        self.contract = load_contract(contract_path)
+        self.contract = contract
 
-        self.job_id = self._create_job_id()
+        self.execution_id = execution_id if execution_id is not None else self._create_execution_id()
 
         # set up folder structure
         self._job_folder = self._create_job_folder()
@@ -64,30 +61,24 @@ class JobContext:
         self.status_path = self._create_status_folder()
         self.logs_path = self._create_log_folder()
 
-        self.logger = get_job_logger(self.job_id, self.logs_path)
-        self.log_event(f"Job {self.job_id} created", JobStatus.PENDING)
+        self.logger = get_job_logger(self.execution_id, self.logs_path)
 
-    @property
-    def contract_path(self):
-        return self._contract_path
+        if execution_id is not None:
+            self._read_status()
+        else:
+            self.logger.info(f"Job {self.execution_id} created")
+            self.set_status(ExecutionStatus.PENDING)
 
-    @contract_path.setter
-    def contract_path(self, value):
-        self._contract_path = value
-        if not os.path.exists(value):
-            raise FileNotFoundError(f"Contract file {value} does not exist")
 
     @property
     def image_ref(self):
-        return construct_image_ref(self.contract)
+        return self.contract.runtime.image.construct_image_ref()
 
     def _create_input_folder(self):
         input_path = os.path.join(self._job_folder, "input")
 
         if not os.path.exists(input_path):
             os.makedirs(input_path)
-        else:
-            raise FileExistsError(f"Input folder for job {self.job_id} already exists")
 
         return input_path
 
@@ -96,44 +87,53 @@ class JobContext:
 
         if not os.path.exists(output_path):
             os.makedirs(output_path)
-        else:
-            raise FileExistsError(f"Output folder for job {self.job_id} already exists")
 
         return output_path
 
     def _create_job_folder(self):
-        job_folder = os.path.join(self._root_path, "jobs", self.job_id)
+        job_folder = os.path.join(self._root_path, CONTRACTS_DIR, self.contract.id, "executions", self.execution_id)
 
         if not os.path.exists(job_folder):
             os.makedirs(job_folder)
-        else:
-            raise FileExistsError(f"Job folder for job {self.job_id} already exists")
 
         return job_folder
 
-    def _create_job_id(self):
-        return f"{self.contract['contract']['id']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    def _create_execution_id(self):
+        return f"{self.contract.id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 
-    def set_status(self, status: JobStatus):
+    def set_status(self, status: ExecutionStatus):
         self.status = status
         with open(os.path.join(self.status_path, "status.json"), "w") as f:
             json.dump({
                 "status": status.value,
                 "lastUpdated": datetime.datetime.now().isoformat(),
-                "jobId": self.job_id
             }, f, sort_keys=True, indent=4)
 
-    def log_event(self, message: str, event: JobStatus, **kwargs):
-        self.logger.debug(message)
-        self.set_status(event)
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel_event.is_set()
+
+    def request_cancel(self) -> None:
+        with self._cancel_lock:
+            self._cancel_event.set()
+            callback = self._cancel_callback
+
+        if callback is not None:
+            callback()
+
+    def set_cancel_callback(self, callback: Callable[[], None] | None) -> None:
+        with self._cancel_lock:
+            self._cancel_callback = callback
+            cancel_requested = self._cancel_event.is_set()
+
+        if callback is not None and cancel_requested:
+            callback()
 
     def _create_status_folder(self):
         status_path = os.path.join(self._job_folder, "status")
 
         if not os.path.exists(status_path):
             os.makedirs(status_path)
-        else:
-            raise FileExistsError(f"Status folder for job {self.job_id} already exists")
 
         return status_path
 
@@ -142,8 +142,6 @@ class JobContext:
 
         if not os.path.exists(log_path):
             os.makedirs(log_path)
-        else:
-            raise FileExistsError(f"Log folder for job {self.job_id} already exists")
 
         return log_path
 
@@ -157,16 +155,21 @@ class JobContext:
             str: The root path, either from the `MELD_ROOT_DIR` environment
             variable or the default value "/".
         """
-        return os.environ.get("MELD_ROOT_DIR", "/")
+        return ROOT_DIR
 
     @staticmethod
-    def create_job_context(contract_path: str):
-        context = JobContext(contract_path=contract_path)
-        return context
+    def create(contract_id: str, execution_id: str = None) -> ExecutionContext:
+        contract = read_contract(contract_id=contract_id)
+        return ExecutionContext(contract=contract, execution_id=execution_id)
+
+    def _read_status(self):
+        with open(os.path.join(self.status_path, "status.json"), "r") as f:
+            self.status = json.loads(f.read())
+
 
 class ContextProvider:
-    def __init__(self, job_context: JobContext):
+    def __init__(self, job_context: ExecutionContext):
         self.job_context = job_context
 
-    def get(self) -> JobContext:
+    def get(self) -> ExecutionContext:
         return self.job_context
