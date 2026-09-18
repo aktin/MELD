@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Mapping, TextIO
@@ -77,7 +78,6 @@ class RuntimeImage(SchemaModel):
         instance = cls(name=data["name"], tag=data["tag"], digest=data["digest"])
         instance._extra = _extra(data, {"name", "tag", "digest"})
         return instance
-
 
     def construct_image_ref(self) -> str:
         """
@@ -218,16 +218,32 @@ class Contract(SchemaModel):
 
     @property
     def id(self) -> str:
-        """Return a stable identifier derived from the contract contents."""
+        """Return the contract's persisted identifier."""
+        if self.contract.id is None:
+            self.contract.id = str(uuid.uuid4())
+        return self.contract.id
+
+    def assign_id(self, force: bool = False) -> str:
+        """Assign and return a server-generated identifier."""
+        if force or self.contract.id is None:
+            self.contract.id = str(uuid.uuid4())
+        return self.contract.id
+
+    def canonical_content(self) -> str:
+        """Return contract content in a stable representation, excluding its ID."""
         identity = self.to_dict()
         identity.get("contract", {}).pop("id", None)
-        canonical = json.dumps(
+        return json.dumps(
             identity,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
         )
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @property
+    def fingerprint(self) -> str:
+        """Return a content fingerprint used for duplicate detection."""
+        return hashlib.sha256(self.canonical_content().encode("utf-8")).hexdigest()
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Contract":
@@ -274,5 +290,6 @@ __all__ = [
     "Query",
     "RuntimeConfig",
     "RuntimeImage",
+    "SchemaModel",
     "TemporalScope",
 ]

@@ -29,7 +29,7 @@ def validate_feature_datatypes(df: pd.DataFrame, features: list[dict]) -> None:
         if not feature:
             continue
 
-        datatype = _feature_value(feature, "datatype")
+        datatype = _feature_value(feature, "datatype").lower()
         if datatype.startswith("string") and not pd.api.types.is_string_dtype(df[col].dtype):
             raise ValueError(f"Column {col} is expected to be of type string, but is of type {df[col].dtype}")
         elif datatype.startswith("int") and not pd.api.types.is_integer_dtype(df[col].dtype):

@@ -2,7 +2,7 @@ from typing import TextIO
 
 from Logger import get_meld_logger
 
-from .contract import Contract
+from .contract_models import Contract
 
 logger = get_meld_logger()
 

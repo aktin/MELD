@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .config_loader import load_contract
-from .contract import (
+from .contract_models import (
     Contract,
     ContractDataType,
     ContractMetadata,
@@ -13,11 +13,13 @@ from .contract import (
     RuntimeImage,
     TemporalScope,
 )
+from .contract_service import ContractService
 
 __all__ = [
     "Contract",
     "ContractDataType",
     "ContractMetadata",
+    "ContractService",
     "Feature",
     "InputSchema",
     "OutputSchema",
@@ -32,10 +34,10 @@ __all__ = [
 ]
 
 
-def run_inference(contract: Contract) -> None:
+def run_inference(contract: Contract, ctx=None) -> None:
     from .manager import run_inference as _run_inference
 
-    return _run_inference(contract)
+    return _run_inference(contract, ctx)
 
 
 def pull_runtime(contract: Contract) -> None:
