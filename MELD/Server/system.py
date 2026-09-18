@@ -1,4 +1,5 @@
 """Health and version endpoints."""
+from flask import Response
 
 from .api import API_VERSION, bp
 
@@ -6,7 +7,7 @@ from .api import API_VERSION, bp
 @bp.get("/health")
 def health():
     """Return a basic server health response."""
-    return "OK"
+    return Response(status_code=200)
 
 
 @bp.get("/version")

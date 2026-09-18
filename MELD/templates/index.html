@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MELD endpoint tester</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.4 system-ui, sans-serif; }
+    body { margin: 0 auto; max-width: 960px; padding: 2rem 1rem; }
+    h1 { margin-top: 0; }
+    section { border: 1px solid #8885; border-radius: .5rem; margin: 1rem 0; padding: 1rem; }
+    .row { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+    label { display: flex; flex: 1 1 15rem; flex-direction: column; gap: .25rem; }
+    input, textarea, button { border: 1px solid #888; border-radius: .3rem; font: inherit; padding: .45rem .6rem; }
+    textarea { box-sizing: border-box; min-height: 14rem; width: 100%; }
+    button { cursor: pointer; }
+    table { border-collapse: collapse; margin-top: 1rem; width: 100%; }
+    th, td { border-bottom: 1px solid #8885; padding: .5rem; text-align: left; vertical-align: top; }
+    td.actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+    pre { background: #8882; border-radius: .3rem; min-height: 8rem; overflow: auto; padding: 1rem; white-space: pre-wrap; }
+    #download { display: block; margin-top: .5rem; }
+    #polling-status { margin: .75rem 0 0; }
+  </style>
+</head>
+<body>
+  <h1>MELD endpoint tester</h1>
+
+  <section>
+    <h2>Server</h2>
+    <div class="row">
+      <button type="button" onclick="call('GET', '/health')">Health</button>
+      <button type="button" onclick="call('GET', '/version')">Version</button>
+      <a href="/swagger/" target="_blank" rel="noreferrer">Swagger UI</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Contracts</h2>
+    <div class="row">
+      <button type="button" onclick="call('GET', '/contracts')">List contracts</button>
+      <button type="button" onclick="validateContract()">Validate YAML</button>
+      <button type="button" onclick="createContract()">Create contract</button>
+    </div>
+    <div class="row">
+      <label>Contract ID
+        <input id="contract-id" placeholder="contract UUID">
+      </label>
+      <label>Registry API key (optional)
+        <input id="registry-key" type="password">
+      </label>
+    </div>
+    <div class="row">
+      <button type="button" onclick="getContract()">Get contract</button>
+      <button type="button" onclick="deleteContract()">Delete contract</button>
+    </div>
+    <label>Contract YAML
+      <textarea id="contract-yaml" placeholder="Paste a MELD contract here"></textarea>
+    </label>
+  </section>
+
+  <section>
+    <h2>Executions</h2>
+    <div class="row">
+      <button type="button" onclick="listExecutions()">List executions</button>
+      <button type="button" onclick="startExecution()">Start execution</button>
+    </div>
+    <p id="polling-status">Enter a contract ID and list its executions.</p>
+    <table>
+      <thead>
+        <tr><th>Execution ID</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="execution-list">
+        <tr><td colspan="3">No executions listed.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Response</h2>
+    <pre id="response">Run an endpoint to see its response.</pre>
+    <a id="download" hidden>Download result archive</a>
+  </section>
+
+  <script>
+    const responseView = document.querySelector('#response');
+    const download = document.querySelector('#download');
+    const pollingStatus = document.querySelector('#polling-status');
+    const finalStates = new Set(['SUCCESS', 'FAILED', 'CANCELED', 'TIMEOUT']);
+    let pollingTimer = null;
+    let pollingInFlight = false;
+    let executionRows = new Map();
+    let pollingContractId = null;
+
+    function value(id) {
+      return document.querySelector(`#${id}`).value.trim();
+    }
+
+    function required(id, label) {
+      const result = value(id);
+      if (!result) {
+        responseView.textContent = `${label} is required.`;
+      }
+      return result;
+    }
+
+    function contractPath(suffix = '') {
+      const contractId = required('contract-id', 'Contract ID');
+      return contractId ? `/contracts/${encodeURIComponent(contractId)}${suffix}` : null;
+    }
+
+    function executionPath(executionId, suffix = '') {
+      const path = contractPath('/executions');
+      if (path && !executionId) {
+        responseView.textContent = 'Execution ID is required.';
+        return null;
+      }
+      return path && `${path}/${encodeURIComponent(executionId)}${suffix}`;
+    }
+
+    function updateIds(location) {
+      if (!location) return;
+      const parts = new URL(location, window.location.origin).pathname.split('/').filter(Boolean);
+      const contractIndex = parts.indexOf('contracts');
+      if (contractIndex < 0) return;
+      const contractId = parts[contractIndex + 1];
+      if (contractId) document.querySelector('#contract-id').value = decodeURIComponent(contractId);
+      if (parts[contractIndex + 2] === 'executions' && parts[contractIndex + 3]) {
+        pollingStatus.textContent = `Started execution ${decodeURIComponent(parts[contractIndex + 3])}. List executions to monitor it.`;
+      }
+    }
+
+    function statusValue(execution) {
+      const status = execution && execution.status;
+      return typeof status === 'object' ? status.status : status;
+    }
+
+    function setResponse(result, body, location = '') {
+      let displayed = body;
+      if (result.headers.get('content-type')?.includes('application/json') && body) {
+        try { displayed = JSON.stringify(JSON.parse(body), null, 2); } catch (_) { /* keep text */ }
+      }
+      responseView.textContent = `${result.status} ${result.statusText}\n${location ? `Location: ${location}\n` : ''}${displayed}`;
+    }
+
+    function stopPolling() {
+      if (pollingTimer !== null) {
+        clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
+    }
+
+    function activeExecutionIds() {
+      return [...executionRows.entries()]
+        .filter(([, row]) => !finalStates.has(row.status))
+        .map(([executionId]) => executionId);
+    }
+
+    function updatePollingStatus() {
+      const active = activeExecutionIds();
+      if (!executionRows.size) {
+        pollingStatus.textContent = 'No executions listed.';
+      } else if (active.length) {
+        pollingStatus.textContent = `Polling ${active.length} active execution${active.length === 1 ? '' : 's'} every second.`;
+      } else {
+        stopPolling();
+        pollingStatus.textContent = 'All listed executions are in a final state.';
+      }
+    }
+
+    function addActionButton(container, label, handler) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.addEventListener('click', handler);
+      container.appendChild(button);
+    }
+
+    function renderExecutions(executions) {
+      const list = document.querySelector('#execution-list');
+      list.replaceChildren();
+      executionRows = new Map();
+
+      if (!executions.length) {
+        list.innerHTML = '<tr><td colspan="3">No executions found.</td></tr>';
+        updatePollingStatus();
+        return;
+      }
+
+      executions.forEach((execution) => {
+        const executionId = execution.execution_id;
+        const status = statusValue(execution) || 'UNKNOWN';
+        const row = document.createElement('tr');
+        const idCell = document.createElement('td');
+        const statusCell = document.createElement('td');
+        const actionsCell = document.createElement('td');
+        idCell.textContent = executionId;
+        statusCell.textContent = status;
+        actionsCell.className = 'actions';
+        addActionButton(actionsCell, 'Status / result', () => getExecution(executionId));
+        addActionButton(actionsCell, 'Logs', () => getLogs(executionId));
+        addActionButton(actionsCell, 'Cancel', () => cancelExecution(executionId));
+        row.append(idCell, statusCell, actionsCell);
+        list.appendChild(row);
+        executionRows.set(executionId, { row, statusCell, status });
+      });
+      updatePollingStatus();
+    }
+
+    async function pollExecutionStatus(executionId) {
+      const path = `/contracts/${encodeURIComponent(pollingContractId)}/executions/${encodeURIComponent(executionId)}`;
+      const result = await fetch(path);
+      const contentType = result.headers.get('content-type') || '';
+      if (contentType.includes('application/zip')) {
+        await result.arrayBuffer();
+        return 'SUCCESS';
+      }
+      const body = await result.text();
+      if (!result.ok) throw new Error(`${result.status} ${result.statusText}`);
+      return statusValue(JSON.parse(body)) || 'UNKNOWN';
+    }
+
+    async function pollExecutionStatuses() {
+      if (pollingInFlight) return;
+      const active = activeExecutionIds();
+      if (!active.length) {
+        updatePollingStatus();
+        return;
+      }
+
+      pollingInFlight = true;
+      try {
+        await Promise.all(active.map(async (executionId) => {
+          const status = await pollExecutionStatus(executionId);
+          const row = executionRows.get(executionId);
+          if (row) {
+            row.status = status;
+            row.statusCell.textContent = status;
+          }
+        }));
+      } catch (error) {
+        pollingStatus.textContent = `Polling failed: ${error}`;
+      } finally {
+        pollingInFlight = false;
+        updatePollingStatus();
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+      if (activeExecutionIds().length) {
+        pollingTimer = setInterval(pollExecutionStatuses, 1000);
+      }
+      updatePollingStatus();
+    }
+
+    async function call(method, path, options = {}) {
+      if (!path) return;
+      download.hidden = true;
+      try {
+        const result = await fetch(path, { method, ...options });
+        const contentType = result.headers.get('content-type') || '';
+        const location = result.headers.get('location');
+        updateIds(location);
+        if (contentType.includes('application/zip')) {
+          const objectUrl = URL.createObjectURL(await result.blob());
+          download.href = objectUrl;
+          download.download = 'summarized_execution.zip';
+          download.hidden = false;
+          responseView.textContent = `${result.status} ${result.statusText}\n${location || ''}`;
+          return;
+        }
+        const body = await result.text();
+        setResponse(result, body, location);
+      } catch (error) {
+        responseView.textContent = `Request failed: ${error}`;
+      }
+    }
+
+    async function listExecutions() {
+      const contractId = required('contract-id', 'Contract ID');
+      if (!contractId) return;
+      const path = `/contracts/${encodeURIComponent(contractId)}/executions`;
+      stopPolling();
+      pollingContractId = contractId;
+      try {
+        const result = await fetch(path);
+        const body = await result.text();
+        if (!result.ok) {
+          setResponse(result, body);
+          return;
+        }
+        const executions = JSON.parse(body);
+        renderExecutions(executions);
+        setResponse(result, `${executions.length} execution${executions.length === 1 ? '' : 's'} listed.`);
+        startPolling();
+      } catch (error) {
+        responseView.textContent = `Request failed: ${error}`;
+        renderExecutions([]);
+      }
+    }
+
+    function yamlOptions() {
+      return {
+        headers: { 'Content-Type': 'application/yaml' },
+        body: value('contract-yaml'),
+      };
+    }
+
+    function validateContract() { call('POST', '/contracts/validate', yamlOptions()); }
+
+    function createContract() {
+      const options = yamlOptions();
+      const registryKey = value('registry-key');
+      if (registryKey) options.headers['X-Docker-Registry-API-Key'] = registryKey;
+      call('POST', '/contracts', options);
+    }
+
+    function getContract() { call('GET', contractPath()); }
+    function deleteContract() { call('DELETE', contractPath()); }
+    function startExecution() { call('POST', contractPath('/executions')); }
+    function getExecution(executionId) { call('GET', executionPath(executionId)); }
+    function getLogs(executionId) { call('GET', executionPath(executionId, '/logs')); }
+    function cancelExecution(executionId) { call('DELETE', executionPath(executionId)); }
+  </script>
+</body>
+</html>

@@ -1,18 +1,29 @@
 import argparse
-import os
 from pathlib import Path
 
 from flask import Flask
 
-from utils.config import API_HOST, API_PORT, CONTRACT_DIRECTORY
+from Logger import get_meld_logger
+from ModelManager import ContractService
+from ModelEnvironment import ExecutionService
+from utils.config import API_HOST, API_PORT, CONTRACTS_DIR
 
 
-def create_app() -> Flask:
+def create_app(contract_service: ContractService | None = None,
+               execution_service: ExecutionService | None = None) -> Flask:
     """Create the Flask application and register the MELD API endpoints."""
-    from Server.endpoints import bp
+    from Server import bp
 
     app = Flask(__name__)
     app.register_blueprint(bp)
+    app.extensions["contract_service"] = (
+        contract_service if contract_service is not None else ContractService()
+    )
+    app.extensions["execution_service"] = (
+        execution_service if execution_service is not None else ExecutionService()
+    )
+    app.logger = get_meld_logger()
+
     return app
 
 
@@ -23,7 +34,7 @@ def _contract_path(contract: str) -> str:
     relative_path = Path(contract)
     if relative_path.is_absolute() or ".." in relative_path.parts:
         raise ValueError("The contract must be a relative path inside the contracts directory")
-    return str(Path(CONTRACT_DIRECTORY) / relative_path)
+    return str(Path(CONTRACTS_DIR) / relative_path)
 
 
 def main(argv: list[str] | None = None) -> int:

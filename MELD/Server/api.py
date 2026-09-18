@@ -1,6 +1,6 @@
 """Shared Flask and Flask-RESTX API configuration."""
 
-from flask import Blueprint
+from flask import Blueprint, render_template
 from flask_restx import Api, Namespace, fields
 from werkzeug.utils import cached_property
 
@@ -18,6 +18,9 @@ bp = Blueprint("meld", __name__)
 class MeldApi(Api):
     """API variant that preserves operation-specific request media types."""
 
+    def render_root(self):
+        return render_template("index.html")
+
     @cached_property
     def __schema__(self):
         schema = super().__schema__
@@ -34,22 +37,17 @@ api = MeldApi(
     bp,
     version=API_VERSION,
     title="MELD API",
-    description="Proposed API for managing contracts, inferences, and schedules.",
+    description="Proposed API for managing contracts and executions.",
     doc="/swagger/",
 )
 
 contracts = Namespace("contracts", description="Contract operations")
-inferences = Namespace("inferences", description="Inference operations")
-schedules = Namespace("schedules", description="Schedule operations")
+executions = Namespace("executions", description="Execution operations")
 
 api.add_namespace(contracts, path="/contracts")
 api.add_namespace(
-    inferences,
-    path="/contracts/<string:contractId>/inferences",
-)
-api.add_namespace(
-    schedules,
-    path="/contracts/<string:contractId>/schedules",
+    executions,
+    path="/contracts/<string:contractId>/executions",
 )
 
 
@@ -65,9 +63,6 @@ error_model = api.model(
                         description="Human-readable error message"
                     ),
                     "details": fields.Raw(description="Additional error details"),
-                    "requestId": fields.String(
-                        description="Request correlation ID"
-                    ),
                 },
             )
         )
@@ -81,14 +76,37 @@ contract_body = api.schema_model(
         "description": "YAML-encoded MELD contract.",
     },
 )
-inference_body = {
-    "type": "object",
-    "description": "Inference request payload; schema TBD.",
-}
-schedule_body = {
-    "type": "object",
-    "description": "Schedule payload; schema TBD.",
-}
+execution_status_model = api.model(
+    "ExecutionStatus",
+    {
+        "status": fields.String(
+            description="Current execution state.",
+            enum=[
+                "PENDING",
+                "PREPARING",
+                "START_QUERY",
+                "QUERY_FINISHED",
+                "CREATED",
+                "RUNNING",
+                "SUCCESS",
+                "FAILED",
+                "CANCELED",
+                "TIMEOUT",
+            ],
+        ),
+        "lastUpdated": fields.DateTime(
+            description="Timestamp of the most recent status update.",
+        ),
+        "jobId": fields.String(description="Execution identifier."),
+    },
+)
+execution_model = api.model(
+    "Execution",
+    {
+        "execution_id": fields.String(description="Execution identifier."),
+        "status": fields.Nested(execution_status_model),
+    },
+)
 
 
 def not_implemented():

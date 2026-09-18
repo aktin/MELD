@@ -1,15 +1,7 @@
 """Public entry points for the MELD HTTP server."""
 
-from .endpoints import (
+from .api import (
     API_VERSION,
-    ContractResource,
-    ContractScheduleResource,
-    ContractSchedulesResource,
-    ContractValidationResource,
-    ContractsResource,
-    InferenceLogsResource,
-    InferenceResource,
-    InferencesResource,
     MeldApi,
     api,
     bp,
@@ -17,25 +9,31 @@ from .endpoints import (
     contracts,
     error_model,
     error_response,
-    health,
-    inference_body,
-    inferences,
+    execution_model,
+    execution_status_model,
+    executions,
     not_implemented,
-    schedule_body,
-    schedules,
-    version,
 )
+from .contracts import (
+    ContractResource,
+    ContractValidationResource,
+    ContractsResource,
+)
+from .executions import (
+    ExecutionLogsResource,
+    ExecutionResource,
+    ExecutionsResource,
+)
+from .system import health, version
 
 __all__ = [
     "API_VERSION",
     "ContractResource",
-    "ContractScheduleResource",
-    "ContractSchedulesResource",
     "ContractValidationResource",
     "ContractsResource",
-    "InferenceLogsResource",
-    "InferenceResource",
-    "InferencesResource",
+    "ExecutionLogsResource",
+    "ExecutionResource",
+    "ExecutionsResource",
     "MeldApi",
     "api",
     "bp",
@@ -43,11 +41,10 @@ __all__ = [
     "contracts",
     "error_model",
     "error_response",
+    "execution_model",
+    "execution_status_model",
+    "executions",
     "health",
-    "inference_body",
-    "inferences",
     "not_implemented",
-    "schedule_body",
-    "schedules",
     "version",
 ]
