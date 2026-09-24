@@ -6,17 +6,11 @@ contract:
 runtime:
   framework: test
   image:
-    name: ghcr.io/simhue/meld/runtime_examples/wait
+    name: ghcr.io/simhue/meld-examples-wait
     tag: "0.1.0"
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   environment_variables:
     WAIT_SECONDS: "5"
-
-schedule:
-  type: cron
-  expression: asd
-
-
 
 input_schema:
   temporal_scope:
