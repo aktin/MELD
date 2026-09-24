@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-ghcr.io/simhue/meld-examples-wait}"
+IMAGE_NAME="${IMAGE_NAME:-ghcr.io/aktin/meld-runtime-examples-wait}"
 TAG="${TAG:-0.1.0}"
 
 BUILD_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

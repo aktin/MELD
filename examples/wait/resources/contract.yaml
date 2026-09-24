@@ -6,7 +6,7 @@ contract:
 runtime:
   framework: test
   image:
-    name: ghcr.io/simhue/meld-examples-wait
+    name: "ghcr.io/aktin/meld-runtime-examples-wait"
     tag: "0.1.0"
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   environment_variables:
