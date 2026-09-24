@@ -12,6 +12,12 @@ runtime:
   environment_variables:
     WAIT_SECONDS: "5"
 
+schedule:
+  type: cron
+  expression: asd
+
+
+
 input_schema:
   temporal_scope:
     type: relative
@@ -26,6 +32,6 @@ input_schema:
 
 output_schema:
   type: csv
-  predictor:
+  labels:
     - name: result
       datatype: string
