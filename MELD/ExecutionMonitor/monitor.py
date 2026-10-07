@@ -36,7 +36,7 @@ class ExecutionMonitor:
         self.update_metric_value(Metrics.CONTRACT_ID, contract.id)
         self.update_metric_value(Metrics.CONTRACT_VERSION, contract.contract.version)
         self.update_metric_value(Metrics.EXPECTED_FEATURE_COUNT, len(contract.input_schema.features))
-        self.update_metric_value(Metrics.EXPECTED_PREDICTOR_COUNT, len(contract.output_schema.predictor))
+        self.update_metric_value(Metrics.EXPECTED_PREDICTOR_COUNT, len(contract.output_schema.labels))
         self.update_metric_value(Metrics.DOCKER_IMAGE_TAG, contract.runtime.image.tag)
         self.update_metric_value(Metrics.DOCKER_IMAGE_NAME, contract.runtime.image.name)
         self.update_metric_value(Metrics.DOCKER_IMAGE_DIGEST, contract.runtime.image.digest)

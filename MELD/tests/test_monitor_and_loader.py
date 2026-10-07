@@ -14,7 +14,7 @@ class MonitorTest(unittest.TestCase):
             id="contract-id",
             contract=MagicMock(version="1.0.0"),
             input_schema=MagicMock(features=[1, 2]),
-            output_schema=MagicMock(predictor=[1]),
+            output_schema=MagicMock(labels=[1]),
             runtime=MagicMock(
                 image=MagicMock(
                     tag="tag",

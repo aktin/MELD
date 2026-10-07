@@ -27,12 +27,12 @@ class InferenceRunnerTest(unittest.TestCase):
         self.context.cancel_requested = False
 
     def runner(self, directory):
-        self.context.input_data_path = str(Path(directory) / "input")
-        self.context.output_data_path = str(Path(directory) / "output")
-        self.context.logs_path = str(Path(directory) / "logs")
-        Path(self.context.input_data_path).mkdir()
-        Path(self.context.output_data_path).mkdir()
-        Path(self.context.logs_path).mkdir()
+        self.context.input_data_path = Path(directory) / "input"
+        self.context.output_data_path = Path(directory) / "output"
+        self.context.logs_path = Path(directory) / "logs"
+        self.context.input_data_path.mkdir()
+        self.context.output_data_path.mkdir()
+        self.context.logs_path.mkdir()
         return InferenceRunner(
             pd.DataFrame({"age": [1]}), self.context, self.monitor
         )
@@ -125,7 +125,7 @@ class InferenceRunnerTest(unittest.TestCase):
             ), patch.object(runner, "pack_archive") as pack:
                 result_path = runner.run()
 
-        self.assertTrue(result_path.endswith("summarized_execution.zip"))
+        self.assertTrue(str(result_path).endswith("summarized_execution.zip"))
         create.assert_called_once_with("image:tag@digest", self.context)
         start.assert_called_once()
         stop.assert_called_once()

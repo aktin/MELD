@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import test_support  # noqa: F401
 from ModelEnvironment import ExecutionStatus
 from ModelEnvironment.execution_service import ExecutionService, run_inference
-from werkzeug.exceptions import BadRequest
 
 
 class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -101,7 +100,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(future.cancelled())
         self.assertNotIn("queued-id", self.service._execution_tasks)
 
-    def test_cancel_execution_rejects_completed_execution(self):
+    def test_cancel_execution_returns_false_for_completed_execution(self):
         for status in (
             ExecutionStatus.SUCCESS,
             ExecutionStatus.FAILED,
@@ -116,15 +115,16 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
                 ), patch.object(self.service, "_check_contract_exists"), patch.object(
                     self.service, "_check_execution_exists"
                 ):
-                    with self.assertRaises(BadRequest):
+                    self.assertFalse(
                         self.service.cancel_execution("contract-id", "execution-id")
+                    )
 
                 context.request_cancel.assert_not_called()
                 context.set_status.assert_not_called()
 
     def test_get_executions_reports_execution_directory_id_and_status(self):
         with tempfile.TemporaryDirectory() as directory, patch(
-            "ModelEnvironment.execution_service.CONTRACTS_DIR", directory
+            "ModelEnvironment.execution_service.CONTRACTS_DIR", Path(directory)
         ):
             execution_folder = Path(directory) / "contract-id" / "executions" / "execution-id"
             execution_folder.joinpath("status").mkdir(parents=True)
@@ -142,14 +142,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
 
     def test_get_executions_sorts_by_execution_id_descending(self):
         with tempfile.TemporaryDirectory() as directory, patch(
-            "ModelEnvironment.execution_service.CONTRACTS_DIR", directory
-        ), patch(
-            "ModelEnvironment.execution_service.glob.glob",
-            return_value=[
-                f"{directory}/contract-id/executions/execution-001/status/status.json",
-                f"{directory}/contract-id/executions/execution-003/status/status.json",
-                f"{directory}/contract-id/executions/execution-002/status/status.json",
-            ],
+            "ModelEnvironment.execution_service.CONTRACTS_DIR", Path(directory)
         ):
             for execution_id in ("execution-001", "execution-002", "execution-003"):
                 status_path = (
@@ -179,7 +172,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
 
     def test_get_result_archive_returns_independent_bytes_stream(self):
         with tempfile.TemporaryDirectory() as directory, patch(
-            "ModelEnvironment.execution_service.CONTRACTS_DIR", directory
+            "ModelEnvironment.execution_service.CONTRACTS_DIR", Path(directory)
         ):
             output = Path(directory) / "contract-id" / "executions" / "execution-id" / "output"
             output.mkdir(parents=True)
@@ -192,11 +185,11 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.read(), b"archive")
 
     def test_read_log_uses_first_matching_log_file(self):
-        context = MagicMock(logs_path="/unused")
+        context = MagicMock(logs_path=Path("/unused"))
         with tempfile.TemporaryDirectory() as directory, patch(
-            "ModelEnvironment.execution_service.CONTRACTS_DIR", directory
+            "ModelEnvironment.execution_service.CONTRACTS_DIR", Path(directory)
         ), patch.object(
-            self.service, "_get_execution_folder", return_value=str(Path(directory) / "execution")
+            self.service, "_get_execution_folder", return_value=Path(directory) / "execution"
         ), patch.object(
             self.service, "_check_contract_exists"
         ), patch.object(
@@ -207,7 +200,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
             logs = Path(directory) / "logs"
             logs.mkdir()
             (logs / "execution.log").write_text("completed\n", encoding="utf-8")
-            context.logs_path = str(logs)
+            context.logs_path = logs
 
             self.assertEqual(self.service.read_log("contract-id", "execution-id"), "completed\n")
 
@@ -222,7 +215,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
         ):
             log_path = Path(directory) / "execution.log"
             log_path.write_text("first\nsecond\n", encoding="utf-8")
-            context.logs_path = directory
+            context.logs_path = Path(directory)
 
             stream = self.service.stream_log("contract-id", "execution-id")
             self.assertEqual(next(stream), "first")

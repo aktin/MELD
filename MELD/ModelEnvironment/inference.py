@@ -1,9 +1,9 @@
 import csv
 import io
-import os
 import tarfile
 import zipfile
 from io import StringIO
+from pathlib import Path
 from typing import Optional
 
 from docker.errors import APIError
@@ -31,10 +31,10 @@ class InferenceRunner:
         self.job_context: ExecutionContext = job_context
         self.monitor: ExecutionMonitor = monitor
         self.image = job_context.image_ref
-        self.output_zip_path = os.path.join(job_context.output_data_path, "summarized_execution.zip")
+        self.output_zip_path = Path(job_context.output_data_path) / "summarized_execution.zip"
         self.runtime_container: Optional[Container] = None
 
-    def run(self) -> str | None:
+    def run(self) -> Path | None:
         """
         Runs inference on the provided input data using the configured runtime environment.
         """
@@ -157,9 +157,9 @@ class InferenceRunner:
             self.job_context.logger.info("Copying input data into runtime container")
             input_csv = self.input_data.to_csv(index=False)
             self.monitor.update_metric_value(Metrics.INFERENCE_INPUT_SIZE, len(input_csv.encode("utf-8")))
-            with open(os.path.join(self.job_context.input_data_path, "input.csv"), "w") as f:
+            with (Path(self.job_context.input_data_path) / "input.csv").open("w") as f:
                 f.write(input_csv)
-            with open(os.path.join(self.job_context.input_data_path, "contract.yaml"), "w") as f:
+            with (Path(self.job_context.input_data_path) / "contract.yaml").open("w") as f:
                 yaml.dump(self.job_context.contract.to_dict(), f)
 
             buf = io.BytesIO()
@@ -223,23 +223,22 @@ class InferenceRunner:
         """
         self.job_context.logger.info("Packing metadata and logs")
         with zipfile.ZipFile(self.output_zip_path, mode="a", compression=zipfile.ZIP_DEFLATED) as out_zip:
-            for root, _, files in os.walk(self.job_context.input_data_path):
-                for file_name in files:
-                    file_path = os.path.join(root, file_name)
-                    arcname = os.path.join("input", os.path.relpath(file_path, self.job_context.input_data_path))
-                    out_zip.write(file_path, arcname)
+            input_data_path = Path(self.job_context.input_data_path)
+            for file_path in input_data_path.rglob("*"):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(input_data_path).as_posix()
+                    out_zip.write(file_path, f"input/{relative_path}")
 
-            for path, arcname in ((self.job_context.logs_path, ""),):
-                if os.path.isdir(path):
-                    for root, _, files in os.walk(path):
-                        for file_name in files:
-                            file_path = os.path.join(root, file_name)
-                            out_zip.write(
-                                file_path,
-                                os.path.join(arcname, os.path.relpath(file_path, path)),
-                            )
-                else:
-                    out_zip.write(path, arcname)
+            logs_path = Path(self.job_context.logs_path)
+            if logs_path.is_dir():
+                for file_path in logs_path.rglob("*"):
+                    if file_path.is_file():
+                        out_zip.write(
+                            file_path,
+                            file_path.relative_to(logs_path).as_posix(),
+                        )
+            else:
+                out_zip.write(logs_path, "")
 
     def get_output_data_from_container(self) -> io.BytesIO:
         """
@@ -265,16 +264,16 @@ class InferenceRunner:
     def verify_result_data(self, output_df: pd.DataFrame) -> None:
         self.job_context.logger.info("Verifying result data")
 
-        predictors = self.job_context.contract.output_schema.predictor
+        labels = self.job_context.contract.output_schema.labels
 
         try:
-            validate_feature_datatypes(output_df, predictors)
+            validate_feature_datatypes(output_df, labels)
         except ValueError as e:
             self.job_context.logger.warning(e)
 
-        unexpected_predictors = get_unexpected_features(output_df, predictors)
-        if unexpected_predictors:
-            self.job_context.logger.warning(f"Unexpected predictors found: {', '.join(unexpected_predictors)}")
+        unexpected_labels = get_unexpected_features(output_df, labels)
+        if unexpected_labels:
+            self.job_context.logger.warning(f"Unexpected labels found: {', '.join(unexpected_labels)}")
 
         input_rows = len(self.input_data.index)
         output_rows = len(output_df.index)

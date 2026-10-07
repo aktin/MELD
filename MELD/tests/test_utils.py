@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 import test_support  # noqa: F401
 
-from ModelManager.contract_models import Feature
+from ModelManager.generated import Feature
 from utils import (
     get_unexpected_features,
     load_yaml,
@@ -88,12 +88,12 @@ class UtilsTest(unittest.TestCase):
                 "    statement: SELECT age\n"
                 "output_schema:\n"
                 "  type: csv\n"
-                "  predictor:\n"
+                "  labels:\n"
                 "    - name: prediction\n"
                 "      datatype: Float64\n",
                 encoding="utf-8",
             )
-            with patch("utils.utils.ROOT_DIR", directory):
+            with patch("utils.utils.ROOT_DIR", Path(directory)):
                 contract = read_contract("contract-id")
 
         self.assertEqual(contract.contract.name, "example")

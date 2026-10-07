@@ -1,6 +1,6 @@
 import logging
-import os
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from utils.config import LOG_DIR
 
@@ -40,7 +40,7 @@ def _has_handler(logger: logging.Logger, handler_name: str) -> bool:
     return any(getattr(handler, "name", None) == handler_name for handler in logger.handlers)
 
 
-def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False, log_dir: str | None = None, console: bool = True) -> logging.Logger:
+def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False, log_dir: Path | None = None, console: bool = True) -> logging.Logger:
     """
     
     :param name: 
@@ -67,9 +67,8 @@ def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False,
     file_handler_name = f"{name}_file"
 
     if log_dir and not _has_handler(logger, file_handler_name):
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        all_file_handler = RotatingFileHandler(os.path.join(log_dir, f"{name}.log"), maxBytes=10485760, backupCount=10)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        all_file_handler = RotatingFileHandler(log_dir / f"{name}.log", maxBytes=10485760, backupCount=10)
         all_file_handler.setFormatter(formatter)
         all_file_handler.setLevel(level)
         all_file_handler.name = file_handler_name
@@ -89,7 +88,7 @@ def get_meld_logger() -> logging.Logger:
     """
     return _setup_logger("meld", log_dir=LOG_DIR, propagate=False, console=True)
 
-def get_job_logger(job_id: str, log_path: str) -> logging.Logger:
+def get_job_logger(job_id: str, log_path: Path) -> logging.Logger:
     """
     Retrieve a logger instance configured for a specific job.
 

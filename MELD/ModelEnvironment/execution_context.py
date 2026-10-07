@@ -1,12 +1,12 @@
 import datetime
 import json
-import os
 import threading
 from collections.abc import Callable
 from enum import Enum
+from pathlib import Path
 
 from Logger import get_job_logger
-from ModelManager.contract_models import Contract
+from ModelManager.contract import Contract, construct_image_ref
 from utils.config import ROOT_DIR, CONTRACTS_DIR
 from utils.utils import read_contract
 
@@ -37,10 +37,10 @@ class ExecutionContext:
         status (ExecutionStatus): The current status of the job.
         contract (Contract): The loaded job contract, including runtime and input schema configurations.
         execution_id (str): A unique identifier for the job, generated based on the current timestamp.
-        input_data_path (str): Path to the input data folder for the job.
-        output_data_path (str): Path to the output data folder for the job.
-        status_path (str): Path to the status folder for the job.
-        logs_path (str): Path to the logs folder for the job.
+        input_data_path (Path): Path to the input data folder for the job.
+        output_data_path (Path): Path to the output data folder for the job.
+        status_path (Path): Path to the status folder for the job.
+        logs_path (Path): Path to the logs folder for the job.
         logger (logging.Logger): The logger used for job-related logging.
     """
 
@@ -72,30 +72,21 @@ class ExecutionContext:
 
     @property
     def image_ref(self):
-        return self.contract.runtime.image.construct_image_ref()
+        return construct_image_ref(self.contract.runtime.image)
 
-    def _create_input_folder(self):
-        input_path = os.path.join(self._job_folder, "input")
-
-        if not os.path.exists(input_path):
-            os.makedirs(input_path)
-
+    def _create_input_folder(self) -> Path:
+        input_path = self._job_folder / "input"
+        input_path.mkdir(parents=True, exist_ok=True)
         return input_path
 
-    def _create_output_folder(self):
-        output_path = os.path.join(self._job_folder, "output")
-
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-
+    def _create_output_folder(self) -> Path:
+        output_path = self._job_folder / "output"
+        output_path.mkdir(parents=True, exist_ok=True)
         return output_path
 
-    def _create_job_folder(self):
-        job_folder = os.path.join(self._root_path, CONTRACTS_DIR, self.contract.id, "executions", self.execution_id)
-
-        if not os.path.exists(job_folder):
-            os.makedirs(job_folder)
-
+    def _create_job_folder(self) -> Path:
+        job_folder = self._root_path / CONTRACTS_DIR / self.contract.id / "executions" / self.execution_id
+        job_folder.mkdir(parents=True, exist_ok=True)
         return job_folder
 
     def _create_execution_id(self):
@@ -103,7 +94,7 @@ class ExecutionContext:
 
     def set_status(self, status: ExecutionStatus):
         self.status = status
-        with open(os.path.join(self.status_path, "status.json"), "w") as f:
+        with (self.status_path / "status.json").open("w") as f:
             json.dump({
                 "status": status.value,
                 "lastUpdated": datetime.datetime.now().isoformat(),
@@ -129,20 +120,14 @@ class ExecutionContext:
         if callback is not None and cancel_requested:
             callback()
 
-    def _create_status_folder(self):
-        status_path = os.path.join(self._job_folder, "status")
-
-        if not os.path.exists(status_path):
-            os.makedirs(status_path)
-
+    def _create_status_folder(self) -> Path:
+        status_path = self._job_folder / "status"
+        status_path.mkdir(parents=True, exist_ok=True)
         return status_path
 
-    def _create_log_folder(self):
-        log_path = os.path.join(self._job_folder, "logs")
-
-        if not os.path.exists(log_path):
-            os.makedirs(log_path)
-
+    def _create_log_folder(self) -> Path:
+        log_path = self._job_folder / "logs"
+        log_path.mkdir(parents=True, exist_ok=True)
         return log_path
 
     @property
@@ -152,18 +137,19 @@ class ExecutionContext:
         variable is not set, it assumes it is running in a Docker container and uses the default value "/".
 
         Returns:
-            str: The root path, either from the `MELD_ROOT_DIR` environment
+            Path: The root path, either from the `MELD_ROOT_DIR` environment
             variable or the default value "/".
         """
-        return ROOT_DIR
+        return Path(ROOT_DIR)
 
     @staticmethod
-    def create(contract_id: str, execution_id: str = None) -> ExecutionContext:
-        contract = read_contract(contract_id=contract_id)
+    def create(contract: str | Contract, execution_id: str = None) -> ExecutionContext:
+        if isinstance(contract, str):
+            contract = read_contract(contract_id=contract)
         return ExecutionContext(contract=contract, execution_id=execution_id)
 
     def _read_status(self):
-        with open(os.path.join(self.status_path, "status.json"), "r") as f:
+        with (self.status_path / "status.json").open("r") as f:
             self.status = json.loads(f.read())
 
 

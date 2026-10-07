@@ -19,12 +19,14 @@ class ExecutionContextTest(unittest.TestCase):
     def setUp(self):
         self.contract = MagicMock()
         self.contract.id = "contract-id"
-        self.contract.runtime.image.construct_image_ref.return_value = "image:tag@digest"
+        self.contract.runtime.image.name = "image"
+        self.contract.runtime.image.tag = "tag"
+        self.contract.runtime.image.digest = "digest"
 
     def test_new_context_creates_folders_and_pending_status(self):
         with tempfile.TemporaryDirectory() as root:
-            with patch("ModelEnvironment.execution_context.ROOT_DIR", root), patch(
-                "ModelEnvironment.execution_context.CONTRACTS_DIR", "contracts"
+            with patch("ModelEnvironment.execution_context.ROOT_DIR", Path(root)), patch(
+                "ModelEnvironment.execution_context.CONTRACTS_DIR", Path("contracts")
             ):
                 context = ExecutionContext(self.contract)
 
@@ -37,8 +39,8 @@ class ExecutionContextTest(unittest.TestCase):
 
     def test_new_context_execution_id_includes_microseconds(self):
         with tempfile.TemporaryDirectory() as root:
-            with patch("ModelEnvironment.execution_context.ROOT_DIR", root), patch(
-                "ModelEnvironment.execution_context.CONTRACTS_DIR", "contracts"
+            with patch("ModelEnvironment.execution_context.ROOT_DIR", Path(root)), patch(
+                "ModelEnvironment.execution_context.CONTRACTS_DIR", Path("contracts")
             ):
                 context = ExecutionContext(self.contract)
 
@@ -48,8 +50,8 @@ class ExecutionContextTest(unittest.TestCase):
 
     def test_new_context_writes_pending_status_and_reloads_persisted_status(self):
         with tempfile.TemporaryDirectory() as root:
-            with patch("ModelEnvironment.execution_context.ROOT_DIR", root), patch(
-                "ModelEnvironment.execution_context.CONTRACTS_DIR", "contracts"
+            with patch("ModelEnvironment.execution_context.ROOT_DIR", Path(root)), patch(
+                "ModelEnvironment.execution_context.CONTRACTS_DIR", Path("contracts")
             ):
                 context = ExecutionContext(self.contract)
                 context.set_status(ExecutionStatus.RUNNING)
@@ -61,8 +63,8 @@ class ExecutionContextTest(unittest.TestCase):
 
     def test_cancellation_callback_runs_when_registered_before_or_after_request(self):
         with tempfile.TemporaryDirectory() as root, patch(
-            "ModelEnvironment.execution_context.ROOT_DIR", root
-        ), patch("ModelEnvironment.execution_context.CONTRACTS_DIR", "contracts"):
+            "ModelEnvironment.execution_context.ROOT_DIR", Path(root)
+        ), patch("ModelEnvironment.execution_context.CONTRACTS_DIR", Path("contracts")):
             context = ExecutionContext(self.contract)
             callback = MagicMock()
             context.request_cancel()
@@ -97,8 +99,8 @@ class LoggerTest(unittest.TestCase):
             logger_name = "meld.test.logger"
             logger = logging.getLogger(logger_name)
             logger.handlers.clear()
-            first = _setup_logger(logger_name, log_dir=directory, console=False)
-            second = _setup_logger(logger_name, log_dir=directory, console=False)
+            first = _setup_logger(logger_name, log_dir=Path(directory), console=False)
+            second = _setup_logger(logger_name, log_dir=Path(directory), console=False)
             first.info("hello")
             for handler in first.handlers:
                 handler.flush()
@@ -113,7 +115,7 @@ class LoggerTest(unittest.TestCase):
 
     def test_job_logger_uses_job_specific_log_directory(self):
         with tempfile.TemporaryDirectory() as directory:
-            logger = get_job_logger("job-id", directory)
+            logger = get_job_logger("job-id", Path(directory))
             logger.info("job message")
             for handler in logger.handlers:
                 handler.flush()

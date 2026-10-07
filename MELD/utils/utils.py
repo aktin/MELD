@@ -8,7 +8,6 @@ validate URLs, generate safe filenames, and download files from the web.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import TextIO
 
@@ -17,7 +16,7 @@ import yaml
 from utils.config import ROOT_DIR
 
 
-def load_yaml(source: str | TextIO) -> dict:
+def load_yaml(source: str | Path | TextIO) -> dict:
     """
     Loads a YAML file and parses its contents into a dictionary.
 
@@ -44,8 +43,11 @@ def to_yaml(source: dict) -> str:
     return yaml.dump(source, default_flow_style=False)
 
 def read_contract(contract_id: str) -> Contract:
-    from ModelManager.contract_models import Contract
+    from ModelManager.contract import Contract
 
-    contract_path = os.path.join(ROOT_DIR, "contracts", contract_id, "contract.yaml")
-    with open(contract_path, "r", encoding="utf-8") as contract_file:
+    contract_path = get_contract_path(contract_id)
+    with contract_path.open("r", encoding="utf-8") as contract_file:
         return Contract.from_yaml(contract_file)
+
+def get_contract_path(contract_id: str) -> Path:
+    return ROOT_DIR / "contracts" / contract_id / "contract.yaml"

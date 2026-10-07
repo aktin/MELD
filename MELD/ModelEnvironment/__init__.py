@@ -7,7 +7,7 @@ __all__ = [
     "ContextProvider",
     "ExecutionContext",
     "ExecutionStatus",
-    "InferenceRunner",
+    "ExecutionService",
     "create_container",
     "delete_image",
     "destroy_container",

@@ -51,7 +51,7 @@ def contract_data(**overrides):
         },
         "output_schema": {
             "type": "csv",
-            "predictor": [{"name": "prediction", "datatype": "Float64"}],
+            "labels": [{"name": "prediction", "datatype": "Float64"}],
         },
     }
     data.update(overrides)
