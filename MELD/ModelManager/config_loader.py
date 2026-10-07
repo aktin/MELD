@@ -1,13 +1,14 @@
+from pathlib import Path
 from typing import TextIO
 
 from Logger import get_meld_logger
 
-from .contract_models import Contract
+from .contract import Contract
 
 logger = get_meld_logger()
 
 
-def load_contract(source: str | TextIO) -> Contract:
+def load_contract(source: str | Path | TextIO) -> Contract:
     """
     Loads a contract from the specified YAML file path.
 

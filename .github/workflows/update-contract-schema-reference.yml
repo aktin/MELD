@@ -26,8 +26,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install schema documentation generator
-        run: python -m pip install --upgrade pip json-schema-for-humans
+      - name: Install schema documentation and model generators
+        run: python -m pip install --upgrade pip json-schema-for-humans datamodel-code-generator
 
       - name: Regenerate contract schema reference
         working-directory: scripts
@@ -37,12 +37,12 @@ jobs:
         run: |
           set -eu
 
-          git add docs/contract_schema_reference.md
-          if git diff --cached --quiet -- docs/contract_schema_reference.md; then
+          git add docs/generated/contract_schema_reference.md MELD/ModelManager/generated
+          if git diff --cached --quiet -- docs/generated/contract_schema_reference.md MELD/ModelManager/generated; then
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: update contract schema reference [skip ci]"
+          git commit -m "docs: update schema reference and generated models [skip ci]"
           git push origin "HEAD:${GITHUB_REF_NAME}"

@@ -1,32 +1,12 @@
 from __future__ import annotations
 
 from .config_loader import load_contract
-from .contract_models import (
-    Contract,
-    ContractDataType,
-    ContractMetadata,
-    Feature,
-    InputSchema,
-    OutputSchema,
-    Query,
-    RuntimeConfig,
-    RuntimeImage,
-    TemporalScope,
-)
+from .contract import Contract
 from .contract_service import ContractService
 
 __all__ = [
     "Contract",
-    "ContractDataType",
-    "ContractMetadata",
     "ContractService",
-    "Feature",
-    "InputSchema",
-    "OutputSchema",
-    "Query",
-    "RuntimeConfig",
-    "RuntimeImage",
-    "TemporalScope",
     "load_contract",
     "pull_runtime",
     "remove_runtime",

@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import zipfile
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pandas as pd
@@ -100,7 +101,7 @@ class ManagerTest(unittest.TestCase):
         monitor.collect_metrics.return_value = {"metric": 1}
         context = MagicMock(logger=MagicMock())
         with tempfile.TemporaryDirectory() as directory:
-            path = f"{directory}/execution.zip"
+            path = Path(directory) / "execution.zip"
             manager.pack_metrics(path, context, monitor)
             with zipfile.ZipFile(path) as archive:
                 metrics = json.loads(archive.read("metrics.json"))
@@ -109,7 +110,7 @@ class ManagerTest(unittest.TestCase):
         monitor.collect_metrics.assert_called_once_with()
 
     def test_run_inference_stages_workflow_and_packs_metrics(self):
-        self.context.output_data_path = "/tmp"
+        self.context.output_data_path = Path("/tmp")
         data = pd.DataFrame({"age": pd.Series([1], dtype="int64")})
         monitor = MagicMock()
         with patch.object(manager, "ExecutionMonitor", return_value=monitor), patch.object(
@@ -122,7 +123,7 @@ class ManagerTest(unittest.TestCase):
         self.context.set_status.assert_any_call(ExecutionStatus.PREPARING)
         runtime.assert_called_once()
         pack_metrics.assert_called_once_with(
-            "/tmp/summarized_execution.zip", self.context, monitor
+            Path("/tmp/summarized_execution.zip"), self.context, monitor
         )
         monitor.stop_total_execution_time.assert_called_once_with()
 

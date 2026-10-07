@@ -1,7 +1,7 @@
 import json
-import os
 import zipfile
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import isodate
 import pandas as pd
@@ -18,7 +18,8 @@ from ModelEnvironment import (
     pull_image,
     run_inference as run_runtime_inference,
 )
-from .contract_models import Contract, Feature
+from .contract import Contract, construct_image_ref
+from .generated import Feature
 from utils import (
     get_unexpected_features,
     validate_feature_datatypes,
@@ -104,22 +105,22 @@ def run_inference(contract: Contract, ctx: ExecutionContext = None) -> None:
     finally:
         monitor.stop_total_execution_time()
 
-        zip_path = os.path.join(ctx.output_data_path, "summarized_execution.zip")
+        zip_path = Path(ctx.output_data_path) / "summarized_execution.zip"
         pack_metrics(zip_path, ctx, monitor)
 
         if ctx.cancel_requested:
             ctx.set_status(ExecutionStatus.CANCELED)
 
-        ctx.logger.info(f"Output data saved to {zip_path[1:]}")
+        ctx.logger.info(f"Output data saved to {zip_path}")
 
 
-def pack_metrics(path: str, job_context: ExecutionContext, monitor: ExecutionMonitor) -> None:
+def pack_metrics(path: Path, job_context: ExecutionContext, monitor: ExecutionMonitor) -> None:
     """
     Packs result files from an input archive into a gzipped tar file.
     """
     job_context.logger.info("Packing monitoring files")
 
-    mode = "a" if os.path.exists(path) else "w"
+    mode = "a" if path.exists() else "w"
     with zipfile.ZipFile(path, mode=mode, compression=zipfile.ZIP_DEFLATED) as out_zip:
         out_zip.writestr("metrics.json", json.dumps(monitor.collect_metrics(), indent=2))
 
@@ -172,7 +173,7 @@ def pull_runtime(contract: Contract) -> None:
         pulling process.
     """
     try:
-        image = contract.runtime.image.construct_image_ref()
+        image = construct_image_ref(contract.runtime.image)
         pull_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime pull: {e}")
@@ -190,7 +191,7 @@ def remove_runtime(contract: Contract) -> None:
         deletion, it is caught and logged.
     """
     try:
-        image = contract.runtime.image.construct_image_ref()
+        image = construct_image_ref(contract.runtime.image)
         delete_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime removal: {e}")

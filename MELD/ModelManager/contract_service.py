@@ -10,21 +10,36 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import yaml
+from apscheduler.jobstores.base import JobLookupError
 from six import StringIO
 
 from utils.config import CONTRACTS_DIR
 
-from .contract_models import Contract
+from .contract import Contract, construct_image_ref
+
+if TYPE_CHECKING:
+    from ExecutionScheduler import SchedulerService
+    from ModelEnvironment import ExecutionService
 
 
 logger = logging.getLogger(__name__)
 
 
 class ContractService:
-    def __init__(self):
+    def __init__(
+        self,
+        scheduler_service: SchedulerService,
+        execution_service: ExecutionService,
+    ) -> None:
+        if scheduler_service is None:
+            raise ValueError("scheduler_service is required")
+        if execution_service is None:
+            raise ValueError("execution_service is required")
+        self.execution_service = execution_service
+        self.scheduler_service = scheduler_service
         self._pull_layers_lock = threading.Lock()
         self._pull_layers: dict[str, dict[str, dict[str, Any]]] = {}
         self._contract_operation_lock = threading.Lock()
@@ -44,27 +59,25 @@ class ContractService:
     def parse_contract(self, payload: str) -> Contract:
         if not payload.strip():
             raise ValueError("The request body must not be empty.")
-        return Contract.from_yaml(StringIO(payload))
+        contract = Contract.from_yaml(StringIO(payload))
+        self.scheduler_service.validate_schedule(contract.schedule)
+        return contract
 
-    def get_contract(self, contractId: str) -> Contract:
-        with self._contract_path(contractId).open(encoding="utf-8") as contract_file:
+    def get_contract(self, contract_id: str) -> Contract:
+        with self._contract_path(contract_id).open(encoding="utf-8") as contract_file:
             contract = Contract.from_yaml(contract_file)
-        if contract.id != contractId:
-            raise FileNotFoundError(contractId)
+        if contract.id != contract_id:
+            raise FileNotFoundError(contract_id)
         return contract
 
     def _find_duplicate(self, contract: Contract) -> Contract | None:
-        fingerprint = contract.fingerprint
-        canonical_content = contract.canonical_content()
         directory = self._contract_directory()
         if not directory.exists():
             return None
 
         for path in sorted(directory.glob("*/contract.yaml")):
             existing_contract = Contract.from_yaml(path)
-            if existing_contract.fingerprint != fingerprint:
-                continue
-            if existing_contract.canonical_content() == canonical_content:
+            if existing_contract == contract:
                 return existing_contract
         return None
 
@@ -91,15 +104,15 @@ class ContractService:
         contract: Contract,
         registry_api_key: str | None = None,
     ) -> bool:
+        self.scheduler_service.validate_schedule(contract.schedule)
         try:
-            image_ref = contract.runtime.image.construct_image_ref()
+            image_ref = construct_image_ref(contract.runtime.image)
         except Exception as error:
             raise ConnectionError(str(error)) from error
 
         with self._contract_operation_lock:
             existing_contract = self._find_duplicate(contract)
             if existing_contract is not None:
-                contract.contract.id = existing_contract.id
                 pull_state = self._get_pull_status(existing_contract.id)
                 if not pull_state or pull_state.get("status") != "failed":
                     raise FileExistsError(existing_contract.id)
@@ -113,20 +126,51 @@ class ContractService:
             contract.assign_id(force=True)
 
             image_available = self._image_available(image_ref)
+            self._store_contract(contract)
             if image_available:
                 self._track_pull_progress(contract.id, "available")
+                self._schedule_contract(contract.id)
             else:
-                self._start_image_pull(contract, image_ref, registry_api_key)
+                try:
+                    self._start_image_pull(contract, image_ref, registry_api_key)
+                except Exception:
+                    shutil.rmtree(
+                        self._contract_path(contract.id).parent,
+                        ignore_errors=True,
+                    )
+                    raise
 
-            self._store_contract(contract)
             return image_available
 
-    def delete_contract(self, contractId: str) -> None:
-        contract = self.get_contract(contractId)
-        shutil.rmtree(self._contract_path(contract.id).parent)
+    def delete_contract(self, contract_id: str) -> None:
+        contract = self.get_contract(contract_id)
+
+        # delete schedule if exists, otherwise do nothing
+        # delete schedule first to avoid nwely created jobs which might cause racing conditions
+        try:
+            self.scheduler_service.remove_job(contract)
+        except JobLookupError:
+            pass
+
+        executions = self.execution_service.get_executions(contract_id)
+
+        for execution in executions:
+            status = execution["status"]
+            if isinstance(status, dict):
+                status = status.get("status")
+            if status not in {"SUCCESS", "FAILED", "CANCELED", "TIMEOUT"}:
+                self.execution_service.cancel_execution(
+                    contract_id,
+                    execution["execution_id"],
+                    wait=True,
+                )
+
         from ModelManager import remove_runtime
 
         remove_runtime(contract)
+
+        shutil.rmtree(self._contract_path(contract.id).parent)
+
 
     def _image_available(self, image_ref: str) -> bool:
         from ModelEnvironment.docker_runtime import image_exists
@@ -276,7 +320,17 @@ class ContractService:
                 continue
 
             self._track_pull_progress(contract_id, "available")
+            self._schedule_contract(contract_id)
             return
+
+    def _schedule_contract(self, contract_id: str) -> None:
+        self.scheduler_service.add_job(self.get_contract(contract_id))
+
+    def restore_scheduler_jobs(self) -> None:
+        for contract in self.get_contracts():
+            status, _ = self._installation_status(contract)
+            if status == "ready":
+                self._schedule_contract(contract.id)
 
     def _pull_retry_delay(self, retry_number: int) -> float:
         try:
@@ -317,7 +371,7 @@ class ContractService:
         if pull_state is None or pull_state.get("status") == "failed":
             try:
                 if self._image_available(
-                    contract.runtime.image.construct_image_ref()
+                    construct_image_ref(contract.runtime.image)
                 ):
                     self._track_pull_progress(contract.id, "available")
                     return "ready", None
@@ -345,7 +399,7 @@ class ContractService:
                 try:
                     self._start_image_pull(
                         contract,
-                        contract.runtime.image.construct_image_ref(),
+                    construct_image_ref(contract.runtime.image),
                     )
                 except Exception as error:
                     logger.exception(

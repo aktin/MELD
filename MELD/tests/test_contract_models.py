@@ -35,7 +35,7 @@ CONTRACT_DATA = {
     },
     "output_schema": {
         "type": "csv",
-        "predictor": [{"name": "prediction", "datatype": "Float64"}],
+        "labels": [{"name": "prediction", "datatype": "Float64"}],
     },
 }
 
@@ -62,22 +62,72 @@ class ContractModelsTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Contract.from_dict(invalid)
 
-    def test_id_is_generated_lazily_and_can_be_forced(self):
+    def test_schema_validation_rejects_missing_labels(self):
+        invalid = {**CONTRACT_DATA, "output_schema": {"type": "csv"}}
+
+        with self.assertRaises(ValidationError):
+            Contract.from_dict(invalid)
+
+    def test_schema_validation_allows_contract_without_schedule(self):
+        self.assertIsInstance(Contract.from_dict(CONTRACT_DATA), Contract)
+
+    def test_schema_validation_accepts_cron_schedule(self):
+        contract = Contract.from_dict(
+            {
+                **CONTRACT_DATA,
+                "schedule": {"expression": "0 0 * * *"},
+            }
+        )
+
+        self.assertEqual(contract.schedule.expression, "0 0 * * *")
+
+    def test_schema_validation_rejects_cron_without_expression(self):
+        invalid = {**CONTRACT_DATA, "schedule": {}}
+
+        with self.assertRaises(ValidationError):
+            Contract.from_dict(invalid)
+
+    def test_schema_validation_rejects_schedule_type(self):
+        invalid = {
+            **CONTRACT_DATA,
+            "schedule": {"type": "cron", "expression": "0 0 * * *"},
+        }
+
+        with self.assertRaises(ValidationError):
+            Contract.from_dict(invalid)
+
+    def test_schema_validation_rejects_interval_fields(self):
+        invalid = {**CONTRACT_DATA, "schedule": {"expression": "0 0 * * *", "days": 1}}
+
+        with self.assertRaises(ValidationError):
+            Contract.from_dict(invalid)
+
+    def test_id_uses_contract_name_and_version(self):
         contract_data = {**CONTRACT_DATA, "contract": {**CONTRACT_DATA["contract"], "id": "provided"}}
         contract = Contract.from_dict(contract_data)
 
-        self.assertEqual(contract.id, "provided")
-        self.assertNotEqual(contract.assign_id(force=True), "provided")
+        self.assertEqual(contract.id, "example-contract-1.0.0")
+        self.assertEqual(contract.assign_id(force=True), "example-contract-1.0.0")
         self.assertEqual(contract.contract.id, contract.id)
 
-    def test_canonical_content_and_fingerprint_ignore_id(self):
+    def test_contracts_are_equal_when_name_and_version_match(self):
         first = Contract.from_dict(CONTRACT_DATA)
         second = Contract.from_dict(
-            {**CONTRACT_DATA, "contract": {**CONTRACT_DATA["contract"], "id": "another"}}
+            {
+                **CONTRACT_DATA,
+                "contract": {
+                    **CONTRACT_DATA["contract"],
+                    "description": "Different",
+                    "id": "another",
+                },
+            }
+        )
+        different_version = Contract.from_dict(
+            {**CONTRACT_DATA, "contract": {**CONTRACT_DATA["contract"], "version": "2.0.0"}}
         )
 
-        self.assertEqual(first.canonical_content(), second.canonical_content())
-        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, different_version)
 
     def test_image_reference_contains_digest(self):
         contract = Contract.from_dict(CONTRACT_DATA)

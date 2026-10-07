@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import test_support
 from ModelManager import Contract, ContractService
@@ -9,7 +9,12 @@ from ModelManager import Contract, ContractService
 
 class ContractServiceTest(unittest.TestCase):
     def setUp(self):
-        self.service = ContractService()
+        self.scheduler_service = MagicMock()
+        self.execution_service = MagicMock()
+        self.service = ContractService(
+            scheduler_service=self.scheduler_service,
+            execution_service=self.execution_service,
+        )
 
     def tearDown(self):
         self.service._pull_executor.shutdown(wait=True, cancel_futures=True)
@@ -17,9 +22,30 @@ class ContractServiceTest(unittest.TestCase):
     def contract(self, **overrides):
         return Contract.from_dict(test_support.contract_data(**overrides))
 
+    def test_requires_scheduler_and_execution_services(self):
+        with self.assertRaises(TypeError):
+            ContractService()
+        with self.assertRaisesRegex(ValueError, "scheduler_service"):
+            ContractService(None, self.execution_service)
+        with self.assertRaisesRegex(ValueError, "execution_service"):
+            ContractService(self.scheduler_service, None)
+
     def test_parse_contract_rejects_empty_payload(self):
         with self.assertRaisesRegex(ValueError, "must not be empty"):
             self.service.parse_contract("  \n")
+
+    def test_create_contract_validates_schedule_before_storage(self):
+        contract = self.contract()
+        self.scheduler_service.validate_schedule.side_effect = ValueError("invalid schedule")
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ), patch.object(self.service, "_image_available") as image_available:
+            with self.assertRaisesRegex(ValueError, "invalid schedule"):
+                self.service.create_contract(contract)
+
+        image_available.assert_not_called()
+        self.assertFalse(Path(directory, contract.id).exists())
 
     def test_pull_runtime_image_passes_progress_callback_and_optional_token(self):
         progress = MagicMock()
@@ -32,7 +58,7 @@ class ContractServiceTest(unittest.TestCase):
 
     def test_image_reference_can_omit_digest_when_configured(self):
         contract = self.contract()
-        with patch("ModelManager.contract_models.PULL_WITH_DIGEST", False):
+        with patch("ModelManager.contract.PULL_WITH_DIGEST", False):
             self.assertEqual(contract.runtime.image.construct_image_ref(), "example/runtime:1.0.0")
 
     def test_create_and_retrieve_contract_persists_yaml_and_status(self):
@@ -51,7 +77,7 @@ class ContractServiceTest(unittest.TestCase):
             {"id": contract.id, "status": "ready"}
         ])
 
-    def test_duplicate_contract_is_rejected_but_fingerprint_collision_is_not(self):
+    def test_duplicate_contract_is_rejected_for_same_name_and_version(self):
         first = self.contract()
         changed = self.contract(
             contract={
@@ -60,19 +86,22 @@ class ContractServiceTest(unittest.TestCase):
                 "version": "1.0.0",
             }
         )
+        different_version = self.contract(
+            contract={
+                "name": "example-contract",
+                "description": "Different",
+                "version": "2.0.0",
+            }
+        )
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ), patch.object(self.service, "_image_available", return_value=True):
             self.service.create_contract(first)
             with self.assertRaises(FileExistsError):
-                self.service.create_contract(self.contract())
-            with patch.object(
-                Contract, "fingerprint", new_callable=PropertyMock,
-                return_value=first.fingerprint,
-            ):
                 self.service.create_contract(changed)
+            self.service.create_contract(different_version)
 
-        self.assertNotEqual(first.id, changed.id)
+        self.assertNotEqual(first.id, different_version.id)
 
     def test_failed_duplicate_restarts_image_pull(self):
         contract = self.contract()
@@ -88,6 +117,22 @@ class ContractServiceTest(unittest.TestCase):
 
         self.assertEqual(retry.id, contract.id)
         self.assertEqual(start_pull.call_count, 2)
+
+    def test_available_image_adds_contract_to_scheduler(self):
+        contract = self.contract()
+        scheduler = MagicMock()
+        service = ContractService(
+            scheduler_service=scheduler,
+            execution_service=MagicMock(),
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ), patch.object(service, "_image_available", return_value=True):
+            self.assertTrue(service.create_contract(contract))
+
+        scheduler.add_job.assert_called_once()
+        scheduled_contract = scheduler.add_job.call_args.args[0]
+        self.assertEqual(scheduled_contract.id, contract.id)
 
     def test_progress_aggregates_layers_and_preserves_failure_information(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(
@@ -117,12 +162,49 @@ class ContractServiceTest(unittest.TestCase):
             self.assertEqual(self.service._pull_retry_delay(10), 60)
             with patch.object(
                 self.service, "_pull_runtime_image", side_effect=[RuntimeError("retry"), None]
-            ) as pull, patch.object(self.service, "_pull_retry_delay", return_value=0):
+            ) as pull, patch.object(self.service, "_pull_retry_delay", return_value=0), patch.object(
+                self.service, "_schedule_contract"
+            ):
                 self.service._pull_image("id", "image")
             progress = self.service._read_progress("id")
 
         self.assertEqual(pull.call_count, 2)
         self.assertEqual(progress["status"], "available")
+
+    def test_successful_image_pull_adds_persisted_contract_to_scheduler(self):
+        contract = self.contract()
+        scheduler = MagicMock()
+        service = ContractService(
+            scheduler_service=scheduler,
+            execution_service=MagicMock(),
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ), patch.object(service, "_pull_runtime_image"):
+            service._store_contract(contract)
+            service._pull_image(contract.id, "image")
+
+        scheduler.add_job.assert_called_once()
+        scheduled_contract = scheduler.add_job.call_args.args[0]
+        self.assertEqual(scheduled_contract.to_dict(), contract.to_dict())
+
+    def test_restore_scheduler_jobs_registers_ready_contracts(self):
+        contract = self.contract()
+        scheduler = MagicMock()
+        service = ContractService(
+            scheduler_service=scheduler,
+            execution_service=MagicMock(),
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ):
+            service._store_contract(contract)
+            service._track_pull_progress(contract.id, "available")
+            service.restore_scheduler_jobs()
+
+        scheduler.add_job.assert_called_once()
+        scheduled_contract = scheduler.add_job.call_args.args[0]
+        self.assertEqual(scheduled_contract.id, contract.id)
 
     def test_invalid_progress_file_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(
@@ -133,6 +215,31 @@ class ContractServiceTest(unittest.TestCase):
             path.write_text("not-json", encoding="utf-8")
 
             self.assertIsNone(self.service._read_progress("id"))
+
+    def test_delete_contract_cancels_active_executions_before_removing_storage(self):
+        contract = self.contract()
+        execution = {"execution_id": "execution-id", "status": {"status": "RUNNING"}}
+        self.execution_service.get_executions.return_value = [execution]
+        calls = []
+        self.execution_service.cancel_execution.side_effect = (
+            lambda *args, **kwargs: calls.append(("cancel", args, kwargs))
+        )
+        self.scheduler_service.remove_job.side_effect = (
+            lambda value: calls.append(("remove_job", value))
+        )
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ):
+            self.service._store_contract(contract)
+            self.service.delete_contract(contract.id)
+            self.assertFalse(Path(directory, contract.id).exists())
+
+        self.assertEqual(calls[0][0], "remove_job")
+        self.assertEqual(calls[1][0], "cancel")
+        self.execution_service.cancel_execution.assert_called_once_with(
+            contract.id, "execution-id", wait=True
+        )
 
 
 if __name__ == "__main__":

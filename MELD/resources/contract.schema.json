@@ -19,16 +19,23 @@
           "pattern": "^[a-z0-9-]+$",
           "maxLength": 50,
           "minLength": 1,
-          "examples": ["heatwave-patient-encounter"]
+          "examples": [
+            "heatwave-patient-encounter"
+          ]
         },
         "description": {
           "description": "Description of the inference runtime",
           "type": "string"
         },
         "version": {
-          "description": "Version of the inference runtime",
+          "description": "Name of the inference runtime, use alphanumeric characters and hyphens only",
           "type": "string",
-          "examples": ["1.0.0"]
+          "pattern": "^[a-z0-9-]+$",
+          "maxLength": 50,
+          "minLength": 1,
+          "examples": [
+            "1.0.0"
+          ]
         }
       },
       "required": [
@@ -44,7 +51,11 @@
         "framework": {
           "description": "Deep learning framework used in the inference runtime",
           "type": "string",
-          "examples": ["Tensorflow", "sklearn", "PyTorch"],
+          "examples": [
+            "Tensorflow",
+            "sklearn",
+            "PyTorch"
+          ],
           "minLength": 1
         },
         "image": {
@@ -54,13 +65,19 @@
             "name": {
               "description": "Docker image repository",
               "type": "string",
-              "examples": ["ghcr.io/aktin/heatwave-patient-encounter"],
+              "examples": [
+                "ghcr.io/aktin/heatwave-patient-encounter"
+              ],
               "minLength": 1
             },
             "tag": {
               "description": "Docker image tag",
               "type": "string",
-              "examples": ["0.1.0", "3.0", "1.0.0-rc.1+20210101.123456"],
+              "examples": [
+                "0.1.0",
+                "3.0",
+                "1.0.0-rc.1+20210101.123456"
+              ],
               "minLength": 1
             },
             "digest": {
@@ -87,6 +104,26 @@
         "image"
       ]
     },
+    "schedule": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "description": "Time zone of the server, defaults to Europe/Berlin",
+          "type": "string",
+          "default": "Europe/Berlin"
+        },
+        "expression": {
+          "description": "Crontab expression, for more details see https://en.wikipedia.org/wiki/Cron ",
+          "type": "string",
+          "format": "regex",
+          "pattern": "^((((\\d+,)+\\d+|(\\d+(\\/|-|#)\\d+)|\\d+L?|\\*(\\/\\d+)?|L(-\\d+)?|\\?|[A-Z]{3}(-[A-Z]{3})?) ?){5,7})$"
+        }
+      },
+      "required": [
+        "expression"
+      ],
+      "unevaluatedProperties": false
+    },
     "input_schema": {
       "description": "Input schema of the inference runtime",
       "type": "object",
@@ -97,11 +134,22 @@
           "properties": {
             "type": {
               "description": "Type of scope, only relative scopes are supported at the moment",
+              "$ref": "#/$defs/temporal_scope_type"
+            },
+            "value": {
+              "type": "string"
+            },
+            "anchor": {
               "type": "string",
-              "enum": [
-                "relative",
-                "absolute"
-              ]
+              "format": "date-time"
+            },
+            "start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "end": {
+              "type": "string",
+              "format": "date-time"
             }
           },
           "allOf": [
@@ -183,10 +231,7 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "enum": [
-                "sql"
-              ]
+              "$ref": "#/$defs/query_type"
             },
             "statement": {
               "description": "Statement to be executed against the Aktin DWH",
@@ -211,10 +256,7 @@
       "properties": {
         "type": {
           "description": "File type of the result file, currently only CSV supported, might be subject to change",
-          "type": "string",
-          "enum": [
-            "csv"
-          ]
+          "$ref": "#/$defs/output_file_type"
         },
         "labels": {
           "description": "Label columns of the result file",
@@ -227,7 +269,7 @@
       },
       "required": [
         "type",
-        "predictor"
+        "labels"
       ]
     }
   },
@@ -238,6 +280,28 @@
     "output_schema"
   ],
   "$defs": {
+    "temporal_scope_type": {
+      "type": "string",
+      "enum": [
+        "relative",
+        "absolute"
+      ],
+      "title": "TemporalScopeType"
+    },
+    "query_type": {
+      "type": "string",
+      "enum": [
+        "sql"
+      ],
+      "title": "QueryType"
+    },
+    "output_file_type": {
+      "type": "string",
+      "enum": [
+        "csv"
+      ],
+      "title": "OutputFileType"
+    },
     "feature": {
       "type": "object",
       "properties": {
