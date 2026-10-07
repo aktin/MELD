@@ -120,7 +120,7 @@ input_schema:
 output_schema:
   type: "csv"
 
-  predictor:
+  labels:
     - name: "predicted_patient_count"
       datatype: "Float64"
 ```
@@ -171,7 +171,7 @@ Your inference script must:
 4. Write all results to `/output/output.csv`
    * The first row is the header
    * The remaining rows are the data
-   * The header must match the `output_schema.predictor` field in the contract file
+   * The header must match the `output_schema.labels` field in the contract file
    ```csv
    predicted_patient_count 
    170 

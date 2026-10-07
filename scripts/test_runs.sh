@@ -8,11 +8,10 @@ export MELD_ROOT_DIR=../MELD
 
 cd ../MELD
 
-MELD_CONTRACT_DIRECTORY=../examples/nn/resources \
-    ./.venv/bin/python main.py run contract.yaml
+./.venv/bin/python main.py &
+server_pid=$!
+trap 'kill "$server_pid"' EXIT
 
-MELD_CONTRACT_DIRECTORY=../examples/sklearn/resources \
-    ./.venv/bin/python main.py run contract.yaml
-
-MELD_CONTRACT_DIRECTORY=../examples/tfdf/resources \
-    ./.venv/bin/python main.py run contract.yaml
+curl --fail --data-binary @../examples/nn/resources/contract.yaml -H 'Content-Type: application/yaml' http://localhost:5000/contracts
+curl --fail --data-binary @../examples/sklearn/resources/contract.yaml -H 'Content-Type: application/yaml' http://localhost:5000/contracts
+curl --fail --data-binary @../examples/tfdf/resources/contract.yaml -H 'Content-Type: application/yaml' http://localhost:5000/contracts

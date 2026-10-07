@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.source="https://github.com/aktin/MELD"
 
 WORKDIR /
 
-RUN mkdir -p /logs /jobs /app
+RUN mkdir -p /logs /contracts /schedules /app
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY *.py ./
 COPY requirements.txt ./requirements.txt
 COPY InternalDataLoader ./InternalDataLoader
 COPY ModelEnvironment ./ModelEnvironment
-#COPY InferenceScheduler ./InferenceScheduler
+COPY ExecutionScheduler ./ExecutionScheduler
 COPY ModelManager ./ModelManager
 COPY ExecutionMonitor ./ExecutionMonitor
 COPY utils ./utils
@@ -29,7 +29,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash meld \
     && pip install --no-cache-dir -r ./requirements.txt \
-    && chown -R meld:meld /logs /jobs
+    && chown -R meld:meld /logs /contracts /schedules
 
 ENV TZ=UTC
 
