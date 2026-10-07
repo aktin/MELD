@@ -4,7 +4,6 @@ from flask import current_app, Response, url_for, send_file
 from flask_restx import Resource
 from jsonschema import ValidationError
 import yaml
-from werkzeug.exceptions import BadRequest
 
 from ModelEnvironment import ExecutionService, ExecutionStatus
 from .api import (
@@ -18,9 +17,6 @@ from .api import (
 
 def _execution_service() -> ExecutionService:
     service = current_app.extensions.get("execution_service")
-    if service is None:
-        service = ExecutionService()
-        current_app.extensions["execution_service"] = service
     return service
 
 def _location_response(contract_id: str, status: int) -> Response:
@@ -120,18 +116,22 @@ class ExecutionResource(Resource):
     @executions_namespace.doc(
         produces=["application/json", "application/zip"],
     )
-    @executions_namespace.response(200, "Execution status or completed result archive", execution_status_model)
+    @executions_namespace.response(200, "Completed result archive", execution_status_model)
+    @executions_namespace.response(202, "Execution is still in progress", execution_status_model)
     @executions_namespace.response(404, "Contract or execution does not exist", error_model)
     @executions_namespace.response(500, "Could not retrieve execution", error_model)
     def get(self, contractId, executionId):
         try:
             ctx = _execution_service().get_execution(contractId, executionId)
             status = _status_value(ctx)
-            if status == ExecutionStatus.SUCCESS.value:
+            if status in FINAL_EXECUTION_STATES:
                 archive = _execution_service().get_result_archive(contractId, executionId)
                 archive.seek(0)
-                return send_file(archive, mimetype="application/zip")
-            return ctx.status, 200
+                return send_file(archive,
+                                 download_name=f"{executionId}.zip",
+                                 mimetype="application/zip",
+                                 as_attachment=True)
+            return ctx.status, 202
         except FileNotFoundError as error:
             return _not_found(error)
         except (OSError, TypeError, ValueError, ValidationError, yaml.YAMLError) as error:
@@ -144,12 +144,12 @@ class ExecutionResource(Resource):
     @executions_namespace.response(500, "Could not cancel execution", error_model)
     def delete(self, contractId, executionId):
         try:
-            _execution_service().cancel_execution(contractId, executionId)
-        except BadRequest as error:
-            return error_response(
-                "EXECUTION_ALREADY_COMPLETED",
-                error.description,
-            ), 400
+            canceled = _execution_service().cancel_execution(contractId, executionId)
+            if not canceled:
+                return error_response(
+                    "EXECUTION_ALREADY_COMPLETED",
+                    f"Execution {executionId} has already completed.",
+                ), 400
         except FileNotFoundError as error:
             return _not_found(error)
         except (OSError, TypeError, ValueError, ValidationError, yaml.YAMLError) as error:

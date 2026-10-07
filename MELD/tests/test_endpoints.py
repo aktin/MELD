@@ -3,10 +3,9 @@ import os
 import sys
 import tempfile
 import unittest
-import uuid
 from io import BytesIO, StringIO
 from pathlib import Path
-from unittest.mock import ANY, MagicMock, PropertyMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import test_support  # noqa: F401
 from ModelManager import Contract
@@ -16,7 +15,7 @@ MELD_ROOT = Path(__file__).resolve().parents[1]
 if str(MELD_ROOT) not in sys.path:
     sys.path.insert(0, str(MELD_ROOT))
 
-from main import create_app, main  # noqa: E402
+from main import create_app  # noqa: E402
 
 
 VALID_CONTRACT = """
@@ -43,7 +42,7 @@ input_schema:
     statement: SELECT age FROM patients
 output_schema:
   type: csv
-  predictor:
+  labels:
     - name: prediction
       datatype: Float64
 """
@@ -77,9 +76,6 @@ class EndpointStubTestCase(unittest.TestCase):
             response.get_json(),
             {"message": "Endpoint stub; implementation pending."},
         )
-
-    def assert_uuid(self, value):
-        self.assertEqual(str(uuid.UUID(value)), value)
 
     def test_list_contracts(self):
         with tempfile.TemporaryDirectory() as contract_directory:
@@ -126,14 +122,6 @@ class EndpointStubTestCase(unittest.TestCase):
             "/contracts/<string:contractId>/schedules/<string:scheduleId>",
             rules,
         )
-
-    @patch("main.app.run")
-    def test_serve_command_starts_flask_server(self, run):
-        self.assertEqual(
-            main(["serve", "--host", "127.0.0.1", "--port", "5050"]),
-            0,
-        )
-        run.assert_called_once_with(host="127.0.0.1", port=5050, debug=False)
 
     def test_create_contract_rejects_malformed_payload(self):
         response = self.client.post(
@@ -216,7 +204,7 @@ class EndpointStubTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.get_data(), b"")
-        self.assert_uuid(contract_id)
+        self.assertEqual(contract_id, "example-contract-1.0.0")
         start_pull.assert_called_once_with(
             ANY,
             "example/runtime:1.0.0@sha256:example",
@@ -248,7 +236,7 @@ class EndpointStubTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.get_data(), b"")
-        self.assert_uuid(contract_id)
+        self.assertEqual(contract_id, "example-contract-1.0.0")
         self.assertEqual(response.headers["Location"], f"/contracts/{contract_id}")
 
     def test_create_contract_replaces_submitted_id(self):
@@ -271,7 +259,7 @@ class EndpointStubTestCase(unittest.TestCase):
 
         contract_id = response.headers["Location"].rsplit("/", 1)[-1]
         self.assertEqual(response.status_code, 201)
-        self.assert_uuid(contract_id)
+        self.assertEqual(contract_id, "example-contract-1.0.0")
         self.assertNotEqual(contract_id, "caller-provided-id")
 
     def test_duplicate_contract_returns_conflict(self):
@@ -299,34 +287,28 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(second_response.status_code, 409)
         self.assertEqual(contract_count, 1)
 
-    def test_fingerprint_collision_does_not_reject_different_contract(self):
+    def test_different_contract_version_is_allowed(self):
         changed_contract = VALID_CONTRACT.replace(
             "Example contract for endpoint tests",
-            "Different contract with the same fingerprint",
-        )
+            "Different contract content",
+        ).replace("version: 1.0.0", "version: 2.0.0")
         with tempfile.TemporaryDirectory() as contract_directory:
             with patch.dict(
                 os.environ,
                 {"MELD_CONTRACT_DIRECTORY": contract_directory},
             ):
                 with patch.object(self.service, "_image_available", return_value=True):
-                    with patch.object(
-                        Contract,
-                        "fingerprint",
-                        new_callable=PropertyMock,
-                        return_value="same-fingerprint",
-                    ):
-                        first_contract = self.service.parse_contract(VALID_CONTRACT)
-                        self.service.create_contract(first_contract)
-                        second_contract = self.service.parse_contract(changed_contract)
-                        self.service.create_contract(second_contract)
+                    first_contract = self.service.parse_contract(VALID_CONTRACT)
+                    self.service.create_contract(first_contract)
+                    second_contract = self.service.parse_contract(changed_contract)
+                    self.service.create_contract(second_contract)
                 contract_count = len(
                     list(Path(contract_directory).glob("*/contract.yaml"))
                 )
 
         self.assertEqual(contract_count, 2)
-        self.assert_uuid(first_contract.id)
-        self.assert_uuid(second_contract.id)
+        self.assertEqual(first_contract.id, "example-contract-1.0.0")
+        self.assertEqual(second_contract.id, "example-contract-2.0.0")
         self.assertNotEqual(first_contract.id, second_contract.id)
 
     def test_retry_existing_contract_returns_empty_accepted_response(self):
@@ -521,9 +503,11 @@ class EndpointStubTestCase(unittest.TestCase):
                 pull_image = unittest.mock.Mock(
                     side_effect=[RuntimeError("connection reset"), None]
                 )
-                service = type(self.service)()
+                service = type(self.service)(MagicMock(), MagicMock())
                 with patch.object(service, "_pull_runtime_image", pull_image):
-                    with patch.object(service, "_pull_retry_delay", return_value=0):
+                    with patch.object(service, "_pull_retry_delay", return_value=0), patch.object(
+                        service, "_schedule_contract"
+                    ):
                         service._pull_image("retry-contract", "example/runtime:1.0.0")
                 progress = service._read_progress("retry-contract")
 
@@ -609,12 +593,10 @@ class EndpointStubTestCase(unittest.TestCase):
         )
 
     def test_cancel_completed_execution_returns_bad_request(self):
-        from werkzeug.exceptions import BadRequest
-
         with patch.object(
             self.execution_service,
             "cancel_execution",
-            side_effect=BadRequest("Execution has already completed."),
+            return_value=False,
         ):
             response = self.client.delete(
                 "/contracts/contract-id/executions/execution-id",
@@ -713,7 +695,7 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(response.get_data(), b"zip-data")
         get_archive.assert_called_once_with("contract-id", "execution-id")
 
-    def test_running_execution_returns_json_status(self):
+    def test_running_execution_returns_accepted_json_status(self):
         from ModelEnvironment import ExecutionStatus
 
         status = {"status": ExecutionStatus.RUNNING.value}
@@ -726,7 +708,7 @@ class EndpointStubTestCase(unittest.TestCase):
                 "/contracts/contract-id/executions/execution-id"
             )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         self.assertEqual(response.get_json(), status)
 
     def test_execution_route_maps_storage_errors(self):

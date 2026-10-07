@@ -7,7 +7,10 @@ from flask_restx import Resource
 from jsonschema import ValidationError
 import yaml
 
+from ExecutionScheduler import SchedulerService
+from ModelManager import load_contract
 from ModelManager.contract_service import ContractService
+from utils.utils import read_contract
 
 from .api import (
     contract_body,
@@ -19,11 +22,11 @@ from .api import (
 
 def _contract_service() -> ContractService:
     service = current_app.extensions.get("contract_service")
-    if service is None:
-        service = ContractService()
-        current_app.extensions["contract_service"] = service
     return service
 
+def _scheduler_service() -> SchedulerService:
+    service = current_app.extensions.get("scheduler_service")
+    return service
 
 def _invalid_contract(error: Exception):
     return error_response(
@@ -104,6 +107,7 @@ class ContractsResource(Resource):
             ), 415
 
         service = _contract_service()
+        scheduler = _scheduler_service()
         try:
             contract = service.parse_contract(request.get_data(as_text=True))
         except (ValidationError, TypeError, ValueError, KeyError, yaml.YAMLError) as error:
@@ -114,6 +118,8 @@ class ContractsResource(Resource):
                 contract,
                 request.headers.get("X-Docker-Registry-API-Key"),
             )
+
+
         except FileExistsError:
             return error_response("CONTRACT_EXISTS", "Contract already exists."), 409
         except ConnectionError as error:
