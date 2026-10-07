@@ -84,7 +84,7 @@
 | --------------------------------------- | ------- | ------ | ---------- | ---------- | --------------------------------------------------------------------------- |
 | + [name](#contract_name )               | No      | string | No         | -          | Name of the inference runtime, use alphanumeric characters and hyphens only |
 | + [description](#contract_description ) | No      | string | No         | -          | Description of the inference runtime                                        |
-| + [version](#contract_version )         | No      | string | No         | -          | Version of the inference runtime                                            |
+| + [version](#contract_version )         | No      | string | No         | -          | Name of the inference runtime, use alphanumeric characters and hyphens only |
 
 ### <a name="contract_name"></a>2.1. Property `name`
 
@@ -123,13 +123,19 @@ heatwave-patient-encounter
 | **Type**     | `string` |
 | **Required** | Yes      |
 
-**Description:** Version of the inference runtime
+**Description:** Name of the inference runtime, use alphanumeric characters and hyphens only
 
 **Example:**
 
 ```yaml
 1.0.0
 ```
+
+| Restrictions                      |                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Min length**                    | 1                                                                                                    |
+| **Max length**                    | 50                                                                                                   |
+| **Must match regular expression** | ```^[a-z0-9-]+$``` [Test](https://regex101.com/?regex=%5E%5Ba-z0-9-%5D%2B%24&testString=%221.0.0%22) |
 
 ## <a name="runtime"></a>3. Property `runtime`
 
@@ -665,4 +671,4 @@ Must be one of:
 | **Same definition as**    | [input_schema_features_items](#input_schema_features_items) |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-09-25 at 10:12:13 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-10-07 at 14:39:14 +0000
