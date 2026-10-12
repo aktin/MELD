@@ -8,8 +8,7 @@ LABEL org.opencontainers.image.source="https://github.com/aktin/MELD"
 
 WORKDIR /
 
-RUN mkdir -p /logs /jobs /app
-
+RUN mkdir -p /logs /contracts /schedules /app
 
 WORKDIR /app
 
@@ -17,10 +16,22 @@ COPY *.py ./
 COPY requirements.txt ./requirements.txt
 COPY InternalDataLoader ./InternalDataLoader
 COPY ModelEnvironment ./ModelEnvironment
+COPY ExecutionScheduler ./ExecutionScheduler
 COPY ModelManager ./ModelManager
+COPY ExecutionMonitor ./ExecutionMonitor
 COPY utils ./utils
 COPY Logger ./Logger
+COPY resources ./resources
+COPY Server ./Server
 
-RUN pip install --no-cache-dir -r ./requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash meld \
+    && pip install --no-cache-dir -r ./requirements.txt \
+    && chown -R meld:meld /logs /contracts /schedules
 
-ENTRYPOINT ["python", "main.py"]
+ENV TZ=UTC
+
+USER meld
+CMD ["sleep", "infinity"]

@@ -32,9 +32,9 @@ def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
     predictions = pipeline.predict(X)
     print("Inference done")
 
-    predictor_name = config["output_schema"]["predictor"][0]["name"]
+    label_name = config["output_schema"]["labels"][0]["name"]
     result_df = df.copy()
-    result_df[predictor_name] = predictions
+    result_df[label_name] = predictions
 
     return result_df
 

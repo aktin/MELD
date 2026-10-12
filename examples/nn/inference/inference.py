@@ -70,10 +70,10 @@ def run_inference(df: pd.DataFrame, config: dict) -> DataFrame:
     raw_predictions = model_layer(inputs)
     prediction_series = _extract_prediction_series(raw_predictions, len(df))
 
-    predictor_name = config["output_schema"]["predictor"][0]["name"]
+    label_name = config["output_schema"]["labels"][0]["name"]
     result_df = df.copy()
 
-    result_df[predictor_name] = prediction_series
+    result_df[label_name] = prediction_series
 
     print(f"Inference done")
 

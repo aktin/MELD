@@ -210,4 +210,6 @@ __marimo__/
 *.csv
 dev/
 db_password.txt
-
+!examples/*/build/
+!examples/*/build/**
+examples/*/build/.context/

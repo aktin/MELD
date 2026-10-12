@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 from sqlalchemy import create_engine
 
@@ -12,7 +13,7 @@ schema = os.getenv("DB_SCHEMA")
 password_file = os.getenv("DB_PASSWORD_FILE")
 
 try:
-    with open(password_file, "r") as f:
+    with Path(password_file).open("r") as f:
         password = f.readline().strip()
 except FileNotFoundError:
     logger.error(f"Database password file could not be found")

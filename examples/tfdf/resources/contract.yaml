@@ -1,5 +1,4 @@
 contract:
-  id: "stationary-admission-test-tfdf"
   name: "stationary-admission-test-tfdf"
   description: "stationary-admission-test-tfdf"
   version: "0.1.0"
@@ -7,9 +6,9 @@ contract:
 runtime:
   framework: "tensorflow-tfdf"
   image:
-    name: "ghcr.io/simhue/meld/runtime_examples/tfdf"
-    tag: "0.1.1-SNAPSHOT"
-    digest: "sha256:d7a0d999b4647543f72ceab7d07a2cd09e7c07ef497a4bb1aa3a765ebac36a9e"
+    name: "ghcr.io/aktin/meld-runtime-examples-tfdf"
+    tag: "1.0.0"
+    digest: "sha256:5837c3a32dd49972a714a63ced8c26a901c458fd8a378d45569bf8c091627f16"
   environment_variables:
     TF_CPP_MIN_LOG_LEVEL: "3"
 
@@ -281,7 +280,6 @@ input_schema:
 
 output_schema:
   type: "csv"
-  predictor:
+  labels:
     - name: "admitted"
       datatype: "Int64"
-

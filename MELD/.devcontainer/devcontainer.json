@@ -1,0 +1,26 @@
+{
+  "name": "MELD Dev Container",
+//  "build": {
+//    "dockerfile": "Dockerfile"
+//  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.terminal.activateEnvironment": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy"
+      ]
+    },
+  },
+  service: "meld",
+  dockerComposeFile: "./compose.yml",
+  "workspaceFolder": "/meld",
+  "postCreateCommand": "pip install -r requirements.txt",
+  "remoteUser": "root",
+//  "runArgs": [
+//    "--network=host"
+//  ],
+}
