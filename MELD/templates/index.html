@@ -45,7 +45,10 @@
       <label>Contract ID
         <input id="contract-id" placeholder="contract UUID">
       </label>
-      <label>Registry API key (optional)
+      <label>Registry username (optional; requires token)
+        <input id="registry-username" type="text">
+      </label>
+      <label>Registry token (optional; requires username)
         <input id="registry-key" type="password">
       </label>
     </div>
@@ -311,7 +314,12 @@
     function createContract() {
       const options = yamlOptions();
       const registryKey = value('registry-key');
-      if (registryKey) options.headers['X-Docker-Registry-API-Key'] = registryKey;
+      const registryUsername = value('registry-username');
+      if (Boolean(registryKey) !== Boolean(registryUsername)) {
+        responseView.textContent = 'Registry username and token must be supplied together.';
+        return;
+      }
+      if (registryKey) options.headers['X-Docker-Registry-Auth'] = JSON.stringify({username: registryUsername, password: registryKey});
       call('POST', '/contracts', options);
     }
 
