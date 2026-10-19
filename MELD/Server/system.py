@@ -7,7 +7,7 @@ from .api import API_VERSION, bp
 @bp.get("/health")
 def health():
     """Return a basic server health response."""
-    return Response(status_code=200)
+    return Response("OK", status=200, mimetype="text/plain")
 
 
 @bp.get("/version")
