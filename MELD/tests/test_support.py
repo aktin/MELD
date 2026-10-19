@@ -18,6 +18,8 @@ TEST_PASSWORD_FILE.write_text("test-password\n", encoding="utf-8")
 # Unit tests own these resources so inherited deployment settings cannot make
 # imports write to `/logs` or require an external database secret.
 os.environ["MELD_LOG_DIR"] = str(TEST_LOG_DIR)
+os.environ["MELD_SCHEDULE_DIR"] = str(TEST_ROOT / "schedules")
+os.environ["MELD_CONTRACT_DIRECTORY"] = str(TEST_ROOT / "contracts")
 os.environ["DB_PASSWORD_FILE"] = str(TEST_PASSWORD_FILE)
 os.environ["DB_HOST"] = "localhost"
 os.environ["DB_PORT"] = "5433"
