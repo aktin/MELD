@@ -1,4 +1,5 @@
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -40,7 +41,7 @@ def _has_handler(logger: logging.Logger, handler_name: str) -> bool:
     return any(getattr(handler, "name", None) == handler_name for handler in logger.handlers)
 
 
-def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False, log_dir: Path | None = None, console: bool = True) -> logging.Logger:
+def _setup_logger(name: str, level: int | None = None, propagate: bool = False, log_dir: Path | None = None, console: bool = True) -> logging.Logger:
     """
     
     :param name: 
@@ -50,6 +51,8 @@ def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False,
     :param console: 
     :return: 
     """
+    if level is None:
+        level = os.environ.get("LOG_LEVEL", "INFO").upper()
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.propagate = propagate
@@ -59,7 +62,7 @@ def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False,
     # avoid duplicates
     if console and not _has_handler(logger, stream_handler_name):
         stdout_handler = logging.StreamHandler()
-        stdout_handler.setFormatter(stream_formatter)
+        stdout_handler.setFormatter(formatter if logger.level <= logging.DEBUG else stream_formatter)
         stdout_handler.setLevel(level)
         stdout_handler.name = stream_handler_name
         logger.addHandler(stdout_handler)
@@ -74,10 +77,7 @@ def _setup_logger(name: str, level: int = logging.INFO, propagate: bool = False,
         all_file_handler.name = file_handler_name
         logger.addHandler(all_file_handler)
 
-    logger.debug(f"Logger {name} initialized")
-
     return logger
-
 
 def get_meld_logger() -> logging.Logger:
     """

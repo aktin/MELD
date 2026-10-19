@@ -1,3 +1,5 @@
+import logging
+
 from flask import Flask
 
 from ExecutionScheduler import SchedulerService
@@ -20,7 +22,14 @@ def create_app() -> Flask:
     app.extensions["scheduler_service"] = scheduler_service
     app.extensions["contract_service"] = contract_service
     app.extensions["execution_service"] = execution_service
+
     contract_service.restore_scheduler_jobs()
+
     app.logger = get_meld_logger()
+
+    werkzeug_logger = logging.getLogger("werkzeug")
+    werkzeug_logger.handlers = app.logger.handlers[:]
+    werkzeug_logger.setLevel(app.logger.level)
+    werkzeug_logger.propagate = False
 
     return app

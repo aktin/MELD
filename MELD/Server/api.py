@@ -4,6 +4,7 @@ from flask import Blueprint, render_template
 from flask_restx import Api, Namespace, fields
 from werkzeug.utils import cached_property
 
+from Logger import get_meld_logger
 from ModelManager import Contract
 
 try:
@@ -11,6 +12,7 @@ try:
 except ImportError:  # pragma: no cover - supports importing the module standalone
     API_VERSION = "0.1.0"
 
+logger = get_meld_logger()
 
 bp = Blueprint("meld", __name__)
 
@@ -117,4 +119,5 @@ def error_response(code: str, message: str, details=None):
     error = {"code": code, "message": message}
     if details is not None:
         error["details"] = details
+    logger.error(error)
     return {"error": error}

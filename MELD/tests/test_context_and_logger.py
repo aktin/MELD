@@ -1,4 +1,6 @@
+import io
 import logging
+import os
 import re
 import tempfile
 import unittest
@@ -82,6 +84,40 @@ class ExecutionContextTest(unittest.TestCase):
 
 
 class LoggerTest(unittest.TestCase):
+    def test_environment_level_controls_logging_and_console_tracebacks(self):
+        for value, expected_level, traceback_visible in (
+            (None, logging.INFO, False),
+            ("debug", logging.DEBUG, True),
+            ("WARNING", logging.WARNING, False),
+        ):
+            with self.subTest(level=value), patch.dict(os.environ, {}, clear=True):
+                if value is not None:
+                    os.environ["LOG_LEVEL"] = value
+                stream = io.StringIO()
+                with patch("sys.stderr", stream):
+                    logger = _setup_logger("test.environment.logger")
+                try:
+                    logger.debug("debug message")
+                    try:
+                        raise ValueError("failure")
+                    except ValueError:
+                        logger.exception("error message")
+
+                    self.assertEqual(logger.level, expected_level)
+                    self.assertIn("error message", stream.getvalue())
+                    self.assertEqual("debug message" in stream.getvalue(), traceback_visible)
+                    self.assertEqual("Traceback" in stream.getvalue(), traceback_visible)
+                finally:
+                    for handler in logger.handlers[:]:
+                        handler.close()
+                        logger.removeHandler(handler)
+
+    def test_explicit_level_overrides_environment(self):
+        with patch.dict(os.environ, {"LOG_LEVEL": "DEBUG"}):
+            logger = _setup_logger("test.explicit.logger", level=logging.WARNING, console=False)
+
+        self.assertEqual(logger.level, logging.WARNING)
+
     def test_formatter_suppresses_traceback_without_mutating_record(self):
         formatter = NoTracebackFormatter("%(message)s")
         record = logging.LogRecord("test", logging.ERROR, __file__, 1, "failure", (), None)
