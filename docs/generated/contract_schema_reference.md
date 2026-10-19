@@ -131,11 +131,11 @@ heatwave-patient-encounter
 1.0.0
 ```
 
-| Restrictions                      |                                                                                                      |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Min length**                    | 1                                                                                                    |
-| **Max length**                    | 50                                                                                                   |
-| **Must match regular expression** | ```^[a-z0-9-]+$``` [Test](https://regex101.com/?regex=%5E%5Ba-z0-9-%5D%2B%24&testString=%221.0.0%22) |
+| Restrictions                      |                                                                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Min length**                    | 1                                                                                                          |
+| **Max length**                    | 50                                                                                                         |
+| **Must match regular expression** | ```^[a-z0-9-\.]+$``` [Test](https://regex101.com/?regex=%5E%5Ba-z0-9-%5C.%5D%2B%24&testString=%221.0.0%22) |
 
 ## <a name="runtime"></a>3. Property `runtime`
 
@@ -367,7 +367,7 @@ ghcr.io/aktin/heatwave-patient-encounter
 | Property                                                       | Pattern | Type   | Deprecated | Definition | Title/Description                                                                                                                                                                              |
 | -------------------------------------------------------------- | ------- | ------ | ---------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | + [value](#input_schema_temporal_scope_allOf_i0_then_value )   | No      | string | No         | -          | Value of the relative scope, must be ISO-8601 duration format. Absolute value will be subtracted from anchor. E.g. P1Y2M3DT4H5M6S for 1 year, 2 months, 3 days, 4 hours, 5 minutes, 6 seconds. |
-| + [anchor](#input_schema_temporal_scope_allOf_i0_then_anchor ) | No      | string | No         | -          | Anchor of the relative scope, must be ISO-8601 date-time format                                                                                                                                |
+| - [anchor](#input_schema_temporal_scope_allOf_i0_then_anchor ) | No      | string | No         | -          | Anchor of the relative scope, must be ISO-8601 date-time format                                                                                                                                |
 
 ###### <a name="input_schema_temporal_scope_allOf_i0_then_value"></a>5.1.1.1.1. Property `value`
 
@@ -390,7 +390,7 @@ P1Y2M3DT4H5M6S
 |              |             |
 | ------------ | ----------- |
 | **Type**     | `string`    |
-| **Required** | Yes         |
+| **Required** | No          |
 | **Format**   | `date-time` |
 
 **Description:** Anchor of the relative scope, must be ISO-8601 date-time format
@@ -671,4 +671,4 @@ Must be one of:
 | **Same definition as**    | [input_schema_features_items](#input_schema_features_items) |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-10-07 at 14:39:14 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-10-19 at 12:05:32 +0000
