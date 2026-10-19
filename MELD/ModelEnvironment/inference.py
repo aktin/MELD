@@ -20,7 +20,7 @@ from .docker_runtime import (
     get_image_size,
     start_container,
     stop_container,
-    wait_for_container,
+    wait_for_container, destroy_container,
 )
 from .execution_context import ExecutionContext, ExecutionStatus
 
@@ -86,6 +86,7 @@ class InferenceRunner:
             output_df = self._csv_as_bytes_to_df(archive_bytes)
             self.verify_result_data(output_df)
             self.collect_result_metrics(output_df)
+            destroy_container(self.runtime_container, self.job_context)
 
         except Exception as e:
             self.job_context.logger.exception(f"An exception occurred during inference: {e}")
@@ -97,6 +98,8 @@ class InferenceRunner:
                 self.job_context.set_cancel_callback(None)
                 if self._cancel_requested():
                     self.job_context.set_status(ExecutionStatus.CANCELED)
+                    if self.runtime_container is not None:
+                        destroy_container(self.runtime_container, self.job_context)
                 self.job_context.logger.info("Inference execution completed")
 
         return self.output_zip_path

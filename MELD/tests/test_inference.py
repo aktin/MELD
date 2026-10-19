@@ -146,6 +146,29 @@ class InferenceRunnerTest(unittest.TestCase):
                 runner.run()
 
         start.assert_not_called()
+        runner.runtime_container.remove.assert_called_once_with()
+        self.context.set_status.assert_called_with(ExecutionStatus.CANCELED)
+
+    def test_run_destroys_container_when_cancelled_while_running(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = self.runner(directory)
+
+            def cancel_during_wait(*args):
+                self.context.cancel_requested = True
+                runner._stop_runtime_container()
+                return 137
+
+            with patch("ModelEnvironment.inference.get_image_size", return_value=10), patch(
+                "ModelEnvironment.inference.create_container", return_value=MagicMock()
+            ), patch("ModelEnvironment.inference.start_container"), patch(
+                "ModelEnvironment.inference.wait_for_container", side_effect=cancel_during_wait
+            ), patch.object(runner, "create_interface_folders"), patch.object(
+                runner, "copy_data_to_container"
+            ), patch.object(runner, "pack_archive"):
+                runner.run()
+
+        runner.runtime_container.stop.assert_called_once_with()
+        runner.runtime_container.remove.assert_called_once_with()
         self.context.set_status.assert_called_with(ExecutionStatus.CANCELED)
 
 
