@@ -235,6 +235,17 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(contract_id, "example-contract-1.0.0")
         self.assertEqual(response.headers["Location"], f"/contracts/{contract_id}")
 
+    def test_create_contract_rejects_invalid_schedule_before_registration(self):
+        payload = VALID_CONTRACT + '\nschedule:\n  expression: "99 * * * *"\n'
+        with patch.object(self.service, "register_contract") as register:
+            response = self.client.post(
+                "/contracts", data=payload, content_type="application/yaml"
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"]["code"], "INVALID_SCHEDULE")
+        register.assert_not_called()
+
     def test_create_contract_replaces_submitted_id(self):
         payload = VALID_CONTRACT.replace(
             "contract:\n",
@@ -295,9 +306,9 @@ class EndpointStubTestCase(unittest.TestCase):
             ):
                 with patch.object(self.service, "_image_available", return_value=True):
                     first_contract = self.service.parse_contract(VALID_CONTRACT)
-                    self.service.create_contract(first_contract)
+                    self.service.register_contract(first_contract)
                     second_contract = self.service.parse_contract(changed_contract)
-                    self.service.create_contract(second_contract)
+                    self.service.register_contract(second_contract)
                 contract_count = len(
                     list(Path(contract_directory).glob("*/contract.yaml"))
                 )
@@ -401,7 +412,7 @@ class EndpointStubTestCase(unittest.TestCase):
                 '{"username": "user", "password": 123}',
             )
         ):
-            with self.subTest(headers=list(headers)), patch.object(self.service, "create_contract") as register:
+            with self.subTest(headers=list(headers)), patch.object(self.service, "register_contract") as register:
                 response = self.client.post(
                     "/contracts", data=VALID_CONTRACT,
                     content_type="application/yaml", headers=headers,
@@ -549,7 +560,7 @@ class EndpointStubTestCase(unittest.TestCase):
                 progress = service._read_progress(contract.id)
 
         self.assertEqual(pull_image.call_count, 2)
-        self.assertEqual(progress["status"], "available")
+        self.assertEqual(progress["status"], "ready")
         self.assertEqual(progress["progress"], 100)
 
     def test_delete_contract(self):
@@ -570,7 +581,9 @@ class EndpointStubTestCase(unittest.TestCase):
                 os.environ,
                 {"MELD_CONTRACT_DIRECTORY": contract_directory},
             ):
-                with patch("ModelManager.remove_runtime"):
+                with patch("ModelManager.remove_runtime"), patch(
+                    "ModelEnvironment.execution_service.CONTRACTS_DIR", Path(contract_directory)
+                ):
                     response = self.client.delete(f"/contracts/{contract.id}")
 
             self.assertFalse(contract_path.parent.exists())
@@ -579,8 +592,11 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(response.get_data(), b"")
 
     def test_validate_contract(self):
-        response = self.client.post("/contracts/validate")
-        self.assertEqual(response.status_code, 404)
+        response = self.client.post(
+            "/contracts/validate", data=VALID_CONTRACT, content_type="application/yaml"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["contract"]["name"], "example-contract")
 
     def test_list_executions(self):
         response = self.client.get("/contracts/contract-id/executions")
@@ -845,7 +861,7 @@ class EndpointStubTestCase(unittest.TestCase):
                 self.service._track_pull_progress(contract_id, "pulling")
                 progress = self.service._read_progress(contract_id)
                 self.assertIsNotNone(progress)
-                self.assertEqual(progress["status"], "pulling")
+                self.assertEqual(progress["status"], "installing")
                 self.assertEqual(progress["progress"], 0)
                 self.assertEqual(set(progress), {"status", "progress"})
 
@@ -859,7 +875,7 @@ class EndpointStubTestCase(unittest.TestCase):
                     },
                 )
                 progress = self.service._read_progress(contract_id)
-                self.assertEqual(progress["status"], "Downloading")
+                self.assertEqual(progress["status"], "installing")
                 self.assertEqual(progress["progress"], 50.0)
                 self.assertEqual(set(progress), {"status", "progress"})
 
@@ -879,7 +895,7 @@ class EndpointStubTestCase(unittest.TestCase):
                 # Step 4: Finished successfully
                 self.service._track_pull_progress(contract_id, "available")
                 progress = self.service._read_progress(contract_id)
-                self.assertEqual(progress["status"], "available")
+                self.assertEqual(progress["status"], "ready")
                 self.assertEqual(progress["progress"], 100)
                 self.assertEqual(set(progress), {"status", "progress"})
 
@@ -901,7 +917,7 @@ class EndpointStubTestCase(unittest.TestCase):
                 )
                 progress = self.service._read_progress(contract_id)
                 self.assertIsNotNone(progress)
-                self.assertEqual(progress["status"], "failed")
+                self.assertEqual(progress["status"], "installing")
                 self.assertEqual(progress["error"], "Image pull timed out")
                 self.assertEqual(set(progress), {"status", "progress", "error"})
 

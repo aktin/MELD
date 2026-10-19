@@ -21,7 +21,6 @@ def create_app() -> Flask:
     app.extensions["contract_service"] = contract_service
     app.extensions["execution_service"] = execution_service
     contract_service.restore_scheduler_jobs()
-    scheduler_service.start()
     app.logger = get_meld_logger()
 
     return app

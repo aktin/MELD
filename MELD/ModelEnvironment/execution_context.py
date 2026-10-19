@@ -6,7 +6,7 @@ from enum import Enum
 from pathlib import Path
 
 from Logger import get_job_logger
-from ModelManager.contract import Contract, construct_image_ref
+from ModelManager.contract import Contract
 from utils.config import ROOT_DIR, CONTRACTS_DIR
 from utils.utils import read_contract
 
@@ -72,7 +72,7 @@ class ExecutionContext:
 
     @property
     def image_ref(self):
-        return construct_image_ref(self.contract.runtime.image)
+        return self.contract.runtime.image.image_ref
 
     def _create_input_folder(self) -> Path:
         input_path = self._job_folder / "input"

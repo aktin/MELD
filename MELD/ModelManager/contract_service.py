@@ -18,7 +18,7 @@ from six import StringIO
 
 from utils.config import CONTRACTS_DIR
 
-from .contract import Contract, construct_image_ref
+from .contract import Contract
 
 if TYPE_CHECKING:
     from ExecutionScheduler import SchedulerService
@@ -63,7 +63,6 @@ class ContractService:
         if not payload.strip():
             raise ValueError("The request body must not be empty.")
         contract = Contract.from_yaml(StringIO(payload))
-        self.scheduler_service.validate_schedule(contract.schedule)
         return contract
 
     def get_contract(self, contract_id: str) -> Contract:
@@ -102,7 +101,8 @@ class ContractService:
             for contract in self.get_contracts()
         ]
 
-    def create_contract(
+
+    def register_contract(
         self,
         contract: Contract,
         auth_config: dict[str, Any] | None = None,
@@ -110,13 +110,13 @@ class ContractService:
         self.scheduler_service.validate_schedule(contract.schedule)
         created = False
         try:
-            image_ref = construct_image_ref(contract.runtime.image)
+            image_ref = contract.runtime.image.image_ref
 
             with self._contract_operation_lock:
                 existing_contract = self._find_duplicate(contract)
                 if existing_contract is not None:
                     pull_state = self._get_pull_status(existing_contract.id)
-                    if not pull_state or pull_state.get("status") != "failed":
+                    if not pull_state or not (pull_state.get("error") or pull_state.get("status") == "failed"):
                         raise FileExistsError(existing_contract.id)
                     if auth_config:
                         self._store_docker_image_secret(auth_config, existing_contract)
@@ -147,7 +147,7 @@ class ContractService:
 
         return image_available
 
-    def delete_contract(self, contract_id: str) -> None:
+    def deregister_contract(self, contract_id: str) -> None:
         contract = self.get_contract(contract_id)
 
         # delete schedule if exists, otherwise do nothing
@@ -195,7 +195,7 @@ class ContractService:
         path = self._docker_secret_path(contract.id)
         auth_config = json.loads(path.read_text()) if path.exists() else None
         pull_image(
-            construct_image_ref(contract.runtime.image),
+            contract.runtime.image.image_ref,
             progress_callback=progress_callback,
             auth_config=auth_config,
         )
@@ -234,18 +234,21 @@ class ContractService:
                 for key in ("status", "progress", "error"):
                     if key in existing_data:
                         current_data[key] = existing_data[key]
-            current_data.setdefault("status", "pulling")
+            current_data["status"] = (
+                "ready" if current_data.get("status") in {"available", "ready"}
+                else "installing"
+            )
             current_data.setdefault("progress", 0)
 
             if isinstance(progress, str):
-                current_data["status"] = progress
-                if progress == "available":
+                current_data["status"] = "ready" if progress in {"available", "ready"} else "installing"
+                if progress in {"available", "ready"}:
                     current_data["progress"] = 100
             elif isinstance(progress, (int, float)):
-                current_data["status"] = "pulling"
+                current_data["status"] = "installing"
                 current_data["progress"] = progress
             elif isinstance(progress, dict):
-                event_status = progress.get("status", "")
+                current_data["status"] = "installing"
                 layer_id = progress.get("id")
                 progress_detail = progress.get("progressDetail", {})
                 if layer_id and isinstance(progress_detail, dict):
@@ -275,15 +278,13 @@ class ContractService:
                             current_data.get("progress", 0),
                             round((current_bytes / total_bytes) * 100, 2),
                         )
-                if event_status:
-                    current_data["status"] = event_status
 
             if progress == "available":
                 with self._pull_layers_lock:
                     self._pull_layers.pop(contract_id, None)
 
             if error:
-                current_data["status"] = "failed"
+                current_data["status"] = "installing"
                 current_data["error"] = error
             elif isinstance(progress, str) and progress in {"pulling", "available"}:
                 current_data.pop("error", None)
@@ -330,7 +331,7 @@ class ContractService:
                 retry_number += 1
                 logger.warning(
                     "Unable to pull image %s; retrying attempt %s: %s",
-                    construct_image_ref(contract.runtime.image),
+                    contract.runtime.image.image_ref,
                     retry_number,
                     error,
                 )
@@ -358,6 +359,8 @@ class ContractService:
             status, _ = self._installation_status(contract)
             if status == "ready":
                 self._schedule_contract(contract.id)
+
+        self.scheduler_service.start()
 
     def _pull_retry_delay(self, retry_number: int) -> float:
         try:
@@ -397,10 +400,10 @@ class ContractService:
         }:
             return "ready", None
 
-        if pull_state is None or pull_state.get("status") == "failed":
+        if pull_state is None or pull_state.get("error") or pull_state.get("status") == "failed":
             try:
                 if self._image_available(
-                    construct_image_ref(contract.runtime.image)
+                    contract.runtime.image.image_ref
                 ):
                     self._track_pull_progress(contract.id, "available")
                     return "ready", None
@@ -424,7 +427,7 @@ class ContractService:
         status, progress = self._installation_status(contract)
         if status == "installing":
             pull_state = self._get_pull_status(contract.id)
-            if pull_state is None or pull_state.get("status") == "failed":
+            if pull_state is None or pull_state.get("error") or pull_state.get("status") == "failed":
                 try:
                     self._start_image_pull(contract)
                 except Exception as error:

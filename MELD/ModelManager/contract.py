@@ -14,7 +14,7 @@ from utils.config import PULL_WITH_DIGEST
 from .generated import (
     Contract as ContractMetadata,
     Feature,
-    Image,
+    Image as GeneratedImage,
     InputSchema,
     MeldInferenceRuntimeContract,
     OutputSchema,
@@ -23,6 +23,13 @@ from .generated import (
     Schedule,
     TemporalScope,
 )
+
+
+class Image(GeneratedImage):
+    @property
+    def image_ref(self) -> str:
+        reference = f"{self.name}:{self.tag}"
+        return f"{reference}@{self.digest}" if PULL_WITH_DIGEST else reference
 
 
 def _to_dict(value: Any) -> Any:
@@ -123,12 +130,4 @@ class Contract(MeldInferenceRuntimeContract):
         return self.id == other.id
 
 
-def construct_image_ref(image: Image) -> str:
-    reference = f"{image.name}:{image.tag}"
-    return f"{reference}@{image.digest}" if PULL_WITH_DIGEST else reference
-
-
-Image.construct_image_ref = construct_image_ref
-
-
-__all__ = ["Contract", "construct_image_ref"]
+__all__ = ["Contract", "Image"]

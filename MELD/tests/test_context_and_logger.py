@@ -22,6 +22,7 @@ class ExecutionContextTest(unittest.TestCase):
         self.contract.runtime.image.name = "image"
         self.contract.runtime.image.tag = "tag"
         self.contract.runtime.image.digest = "digest"
+        self.contract.runtime.image.image_ref = "image:tag@digest"
 
     def test_new_context_creates_folders_and_pending_status(self):
         with tempfile.TemporaryDirectory() as root:

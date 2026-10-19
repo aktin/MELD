@@ -133,7 +133,7 @@ class ContractModelsTest(unittest.TestCase):
         contract = Contract.from_dict(CONTRACT_DATA)
 
         self.assertEqual(
-            contract.runtime.image.construct_image_ref(),
+            contract.runtime.image.image_ref,
             "example/runtime:1.0.0@sha256:example",
         )
 

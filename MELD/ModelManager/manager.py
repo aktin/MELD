@@ -18,7 +18,7 @@ from ModelEnvironment import (
     pull_image,
     run_inference as run_runtime_inference,
 )
-from .contract import Contract, construct_image_ref
+from .contract import Contract
 from .generated import Feature
 from utils import (
     get_unexpected_features,
@@ -173,7 +173,7 @@ def pull_runtime(contract: Contract) -> None:
         pulling process.
     """
     try:
-        image = construct_image_ref(contract.runtime.image)
+        image = contract.runtime.image.image_ref
         pull_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime pull: {e}")
@@ -191,7 +191,7 @@ def remove_runtime(contract: Contract) -> None:
         deletion, it is caught and logged.
     """
     try:
-        image = construct_image_ref(contract.runtime.image)
+        image = contract.runtime.image.image_ref
         delete_image(image)
     except Exception as e:
         logger.exception(f"An exception occurred during runtime removal: {e}")

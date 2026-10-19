@@ -2,16 +2,13 @@
 
 import json
 
+import yaml
 from flask import Response, current_app, request, url_for
 from flask_restx import Resource
 from jsonschema import ValidationError
-import yaml
 
 from ExecutionScheduler import SchedulerService
-from ModelManager import load_contract
 from ModelManager.contract_service import ContractService
-from utils.utils import read_contract
-
 from .api import (
     contract_body,
     contracts as contracts_namespace,
@@ -35,6 +32,12 @@ def _invalid_contract(error: Exception):
         str(error),
     ), 400
 
+def _invalid_schedule(error: Exception):
+    return error_response(
+        "INVALID_SCHEDULE",
+        "Schedule is malformed.",
+        str(error),
+    ), 400
 
 def _storage_error(error: Exception):
     return error_response(
@@ -125,16 +128,22 @@ class ContractsResource(Resource):
                     str(error),
                 ), 400
 
-        service = _contract_service()
-        scheduler = _scheduler_service()
+        contract_service = _contract_service()
+        scheduler_service = _scheduler_service()
 
         try:
-            contract = service.parse_contract(request.get_data(as_text=True))
+            contract = contract_service.parse_contract(request.get_data(as_text=True))
         except (ValidationError, TypeError, ValueError, KeyError, yaml.YAMLError) as error:
             return _invalid_contract(error)
 
+        if contract.schedule:
+            try:
+                scheduler_service.validate_schedule(contract.schedule)
+            except ValueError as error:
+                return _invalid_schedule(error)
+
         try:
-            image_available = service.create_contract(
+            image_available = contract_service.register_contract(
                 contract,
                 registry_auth_params,
             )
@@ -189,7 +198,7 @@ class ContractResource(Resource):
     @contracts_namespace.response(404, "Contract does not exist", error_model)
     def delete(self, contract_id):
         try:
-            _contract_service().delete_contract(contract_id)
+            _contract_service().deregister_contract(contract_id)
         except FileNotFoundError:
             return error_response("CONTRACT_NOT_FOUND", "Contract does not exist."), 404
         except (OSError, ValidationError, TypeError, ValueError, KeyError, yaml.YAMLError) as error:
@@ -216,6 +225,11 @@ class ContractValidationResource(Resource):
             )
         except (ValidationError, TypeError, ValueError, KeyError, yaml.YAMLError) as error:
             return _invalid_contract(error)
+
+        try:
+            _scheduler_service().validate_schedule(contract.schedule)
+        except ValueError as error:
+            return _invalid_schedule(error)
 
         return Response(
             json.dumps(contract.to_dict()),

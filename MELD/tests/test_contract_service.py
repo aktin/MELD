@@ -43,7 +43,7 @@ class ContractServiceTest(unittest.TestCase):
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ), patch.object(self.service, "_image_available") as image_available:
             with self.assertRaisesRegex(ValueError, "invalid schedule"):
-                self.service.create_contract(contract)
+                self.service.register_contract(contract)
 
         image_available.assert_not_called()
         self.assertFalse(Path(directory, contract.id).exists())
@@ -60,8 +60,8 @@ class ContractServiceTest(unittest.TestCase):
             self.service._store_docker_image_secret(auth_config, contract)
             self.service._pull_runtime_image(contract, progress)
 
-        pull.assert_any_call(contract.runtime.image.construct_image_ref(), progress_callback=progress, auth_config=None)
-        pull.assert_any_call(contract.runtime.image.construct_image_ref(), progress_callback=progress, auth_config=auth_config)
+        pull.assert_any_call(contract.runtime.image.image_ref, progress_callback=progress, auth_config=None)
+        pull.assert_any_call(contract.runtime.image.image_ref, progress_callback=progress, auth_config=auth_config)
 
     def test_registry_credentials_are_persisted_and_used_after_restart(self):
         contract = self.contract()
@@ -70,7 +70,7 @@ class ContractServiceTest(unittest.TestCase):
         ), patch.object(self.service, "_image_available", return_value=False), patch.object(
             self.service, "_start_image_pull"
         ) as start_pull:
-            self.service.create_contract(contract, {"username": "user", "password": "token", "serveraddress": "registry.example"})
+            self.service.register_contract(contract, {"username": "user", "password": "token", "serveraddress": "registry.example"})
             start_pull.assert_called_once_with(contract)
             with patch.object(self.service, "_pull_image") as pull:
                 self.service.restart_image_pull()
@@ -79,14 +79,15 @@ class ContractServiceTest(unittest.TestCase):
     def test_image_reference_can_omit_digest_when_configured(self):
         contract = self.contract()
         with patch("ModelManager.contract.PULL_WITH_DIGEST", False):
-            self.assertEqual(contract.runtime.image.construct_image_ref(), "example/runtime:1.0.0")
+            self.assertEqual(contract.runtime.image.image_ref, "example/runtime:1.0.0")
 
     def test_create_and_retrieve_contract_persists_yaml_and_status(self):
         contract = self.contract()
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ), patch.object(self.service, "_image_available", return_value=True):
-            self.assertTrue(self.service.create_contract(contract))
+            self.assertTrue(self.service.register_contract(contract))
+            self.assertEqual(self.service._read_progress(contract.id)["status"], "ready")
             loaded = self.service.get_contract(contract.id)
             info = self.service.get_contract_info(contract.id)
             contracts_info = self.service.get_contracts_info()
@@ -116,11 +117,11 @@ class ContractServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ), patch.object(self.service, "_image_available", return_value=True):
-            self.service.create_contract(first)
+            self.service.register_contract(first)
             with self.assertRaises(FileExistsError):
-                self.service.create_contract(changed)
+                self.service.register_contract(changed)
             self.assertEqual(self.service.get_contract(first.id).to_dict(), first.to_dict())
-            self.service.create_contract(different_version)
+            self.service.register_contract(different_version)
 
         self.assertNotEqual(first.id, different_version.id)
 
@@ -131,10 +132,10 @@ class ContractServiceTest(unittest.TestCase):
         ), patch.object(self.service, "_image_available", return_value=False), patch.object(
             self.service, "_start_image_pull"
         ) as start_pull:
-            self.service.create_contract(contract)
+            self.service.register_contract(contract)
             self.service._track_pull_progress(contract.id, "failed", "pull failed")
             retry = self.contract()
-            self.assertFalse(self.service.create_contract(retry))
+            self.assertFalse(self.service.register_contract(retry))
 
         self.assertEqual(retry.id, contract.id)
         self.assertEqual(start_pull.call_count, 2)
@@ -153,7 +154,7 @@ class ContractServiceTest(unittest.TestCase):
 
                 with patch.object(self.service, "_start_image_pull", side_effect=error):
                     with self.assertRaises(type(error)):
-                        self.service.create_contract(self.contract())
+                        self.service.register_contract(self.contract())
 
                 self.assertEqual(self.service.get_contract(contract.id).to_dict(), contract.to_dict())
                 self.assertEqual(archive.read_bytes(), b"existing result")
@@ -167,7 +168,7 @@ class ContractServiceTest(unittest.TestCase):
             ):
                 contract = self.contract()
                 with self.assertRaises(type(error)):
-                    self.service.create_contract(contract)
+                    self.service.register_contract(contract)
 
                 self.assertFalse(Path(directory, contract.id).exists())
 
@@ -188,7 +189,7 @@ class ContractServiceTest(unittest.TestCase):
             ), patch.object(self.service, "_image_available", return_value=False):
                 result = []
                 registration = threading.Thread(
-                    target=lambda: result.append(self.service.create_contract(contract)),
+                    target=lambda: result.append(self.service.register_contract(contract)),
                     daemon=True,
                 )
                 registration.start()
@@ -215,7 +216,7 @@ class ContractServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ), patch.object(service, "_image_available", return_value=True):
-            self.assertTrue(service.create_contract(contract))
+            self.assertTrue(service.register_contract(contract))
 
         scheduler.add_job.assert_called_once()
         scheduled_contract = scheduler.add_job.call_args.args[0]
@@ -233,11 +234,12 @@ class ContractServiceTest(unittest.TestCase):
                 "id", {"status": "Downloading", "id": "two", "progressDetail": {"current": 100, "total": 100}}
             )
             progress = self.service._read_progress("id")
+            self.assertEqual(progress["status"], "installing")
             self.assertEqual(progress["progress"], 62.5)
             self.service._track_pull_progress("id", "failed", "network")
             progress = self.service._read_progress("id")
 
-        self.assertEqual(progress["status"], "failed")
+        self.assertEqual(progress["status"], "installing")
         self.assertEqual(progress["error"], "network")
 
     def test_pull_retries_with_capped_backoff_and_marks_available(self):
@@ -257,7 +259,7 @@ class ContractServiceTest(unittest.TestCase):
             progress = self.service._read_progress(contract.id)
 
         self.assertEqual(pull.call_count, 2)
-        self.assertEqual(progress["status"], "available")
+        self.assertEqual(progress["status"], "ready")
 
     def test_successful_image_pull_adds_persisted_contract_to_scheduler(self):
         contract = self.contract()
@@ -320,7 +322,7 @@ class ContractServiceTest(unittest.TestCase):
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ):
             self.service._store_contract(contract)
-            self.service.delete_contract(contract.id)
+            self.service.deregister_contract(contract.id)
             self.assertFalse(Path(directory, contract.id).exists())
 
         self.assertEqual(calls[0][0], "remove_job")
