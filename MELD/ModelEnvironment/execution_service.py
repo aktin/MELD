@@ -51,7 +51,7 @@ class ExecutionService:
             execution_id = s.parent.parent.name
 
             executions.append({"status": status, "execution_id": execution_id})
-        return executions
+        return sorted(executions, key=lambda execution: execution["execution_id"], reverse=True)
 
     def get_execution(self, contract_id: str, execution_id: str) -> ExecutionContext | None:
         self._check_contract_exists(contract_id)
