@@ -76,6 +76,11 @@ def pull_image(
         an error during the attempt to pull the image.
     """
     try:
+        if "@" in image:
+            name, digest = image.split("@", 1)
+            if ":" in name.rsplit("/", 1)[-1]:
+                name = name.rsplit(":", 1)[0]
+            image = f"{name}@{digest}"
         logger.info(f"Pulling runtime image {image}")
         if progress_callback is None:
             if auth_config:
@@ -164,6 +169,7 @@ def image_exists(image: str) -> bool:
         return True
     except ImageNotFound:
         return False
+
 
 def start_container(container: Container, job_context: ExecutionContext, ) -> None:
     """

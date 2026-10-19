@@ -32,6 +32,15 @@ class DockerRuntimeTest(unittest.TestCase):
             "private/image:tag", auth_config={"username": "user", "password": "token", "serveraddress": "registry.example"}
         )
 
+    def test_pull_image_removes_tag_when_digest_is_present(self):
+        image = "ghcr.io/aktin/runtime:1.0.0@sha256:example"
+        reference = "ghcr.io/aktin/runtime@sha256:example"
+        docker_runtime.pull_image(image)
+        docker_runtime.pull_image(image, MagicMock())
+
+        self.client.images.pull.assert_called_once_with(reference)
+        self.client.api.pull.assert_called_once_with(reference, stream=True, decode=True)
+
     def test_pull_image_preserves_docker_error_details(self):
         self.client.api.pull.side_effect = APIError("manifest unknown")
         with self.assertRaisesRegex(RuntimeError, "manifest unknown"):
