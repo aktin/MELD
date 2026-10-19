@@ -25,12 +25,17 @@ class DockerRuntimeTest(unittest.TestCase):
 
     def test_pull_image_supports_plain_and_authenticated_pulls(self):
         docker_runtime.pull_image("image:tag")
-        docker_runtime.pull_image("private/image:tag", registry_api_key="token")
+        docker_runtime.pull_image("private/image:tag", auth_config={"username": "user", "password": "token", "serveraddress": "registry.example"})
 
         self.client.images.pull.assert_any_call("image:tag")
         self.client.images.pull.assert_any_call(
-            "private/image:tag", auth_config={"identitytoken": "token"}
+            "private/image:tag", auth_config={"username": "user", "password": "token", "serveraddress": "registry.example"}
         )
+
+    def test_pull_image_preserves_docker_error_details(self):
+        self.client.api.pull.side_effect = APIError("manifest unknown")
+        with self.assertRaisesRegex(RuntimeError, "manifest unknown"):
+            docker_runtime.pull_image("image", MagicMock())
 
     def test_import_does_not_connect_to_docker(self):
         docker_runtime.client = None
@@ -45,16 +50,25 @@ class DockerRuntimeTest(unittest.TestCase):
         callback = MagicMock()
         self.client.api.pull.return_value = [{"status": "Downloading"}, {"status": "Done"}]
 
-        docker_runtime.pull_image("image", callback, "token")
+        docker_runtime.pull_image("image", callback, {"username": "user", "password": "token", "serveraddress": "registry.example"})
 
         self.client.api.pull.assert_called_once_with(
-            "image", stream=True, decode=True, auth_config={"identitytoken": "token"}
+            "image", stream=True, decode=True, auth_config={"username": "user", "password": "token", "serveraddress": "registry.example"}
         )
         self.assertEqual(callback.call_count, 2)
 
         self.client.api.pull.return_value = [{"error": "denied"}]
-        with self.assertRaisesRegex(RuntimeError, "denied"):
+        with self.assertRaisesRegex(PermissionError, "denied"):
             docker_runtime.pull_image("image", callback)
+
+    def test_pull_image_permission_errors(self):
+        self.client.api.pull.return_value = [{"error": "permission denied"}]
+        with self.assertRaisesRegex(PermissionError, "permission denied"):
+            docker_runtime.pull_image("image", MagicMock())
+
+        self.client.images.pull.side_effect = APIError("unauthorized")
+        with self.assertRaisesRegex(PermissionError, "unauthorized"):
+            docker_runtime.pull_image("image")
 
     def test_pull_and_delete_translate_docker_errors(self):
         self.client.images.pull.side_effect = NotFound("missing")
