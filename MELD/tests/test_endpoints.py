@@ -205,11 +205,7 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.get_data(), b"")
         self.assertEqual(contract_id, "example-contract-1.0.0")
-        start_pull.assert_called_once_with(
-            ANY,
-            "example/runtime:1.0.0@sha256:example",
-            None,
-        )
+        start_pull.assert_called_once_with(ANY)
         self.assertEqual(response.headers["Location"], f"/contracts/{contract_id}")
 
     def test_create_ready_contract_returns_empty_created_response(self):
@@ -338,11 +334,30 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.get_data(), b"")
         self.assertEqual(response.headers["Location"], f"/contracts/{contract.id}")
-        start_pull.assert_called_once_with(
-            ANY,
-            "example/runtime:1.0.0@sha256:example",
-            None,
-        )
+        start_pull.assert_called_once_with(ANY)
+
+    def test_create_contract_returns_401_when_image_pull_is_denied(self):
+        with tempfile.TemporaryDirectory() as contract_directory:
+            with patch.dict(
+                os.environ,
+                {"MELD_CONTRACT_DIRECTORY": contract_directory},
+            ):
+                with patch.object(self.service, "_image_available", return_value=False):
+                    with patch.object(
+                        self.service,
+                        "_pull_runtime_image",
+                        side_effect=PermissionError("permission denied"),
+                    ) as pull_image:
+                        response = self.client.post(
+                            "/contracts",
+                            data=VALID_CONTRACT,
+                            content_type="application/yaml",
+                        )
+                self.assertFalse(any(Path(contract_directory).glob("*/contract.yaml")))
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.get_json()["error"]["code"], "IMAGE_PULL_FAILED")
+        pull_image.assert_called_once()
 
     def test_create_contract_does_not_store_when_pull_cannot_start(self):
         with tempfile.TemporaryDirectory() as contract_directory:
@@ -372,6 +387,30 @@ class EndpointStubTestCase(unittest.TestCase):
             "IMAGE_PULL_FAILED",
         )
 
+    def test_create_contract_rejects_incomplete_registry_credentials(self):
+        for headers in (
+            {"X-Docker-Registry-Auth": value}
+            for value in (
+                '{"username": "user"}',
+                '{"password": "token"}',
+                '{"username": "  ", "password": "token"}',
+                '{"username": "user", "password": "  "}',
+                'invalid-json',
+                '[]',
+                'null',
+                '{"username": "user", "password": 123}',
+            )
+        ):
+            with self.subTest(headers=list(headers)), patch.object(self.service, "create_contract") as register:
+                response = self.client.post(
+                    "/contracts", data=VALID_CONTRACT,
+                    content_type="application/yaml", headers=headers,
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.get_json()["error"]["code"], "INVALID_REGISTRY_CREDENTIALS")
+                self.assertIn("username and token", response.get_json()["error"]["message"])
+                register.assert_not_called()
+
     def test_create_contract_passes_registry_api_key_to_pull(self):
         contract = Contract.from_yaml(StringIO(VALID_CONTRACT))
         with tempfile.TemporaryDirectory() as contract_directory:
@@ -386,16 +425,16 @@ class EndpointStubTestCase(unittest.TestCase):
                             data=VALID_CONTRACT,
                             content_type="application/yaml",
                             headers={
-                                "X-Docker-Registry-API-Key": "registry-token",
+                                'X-Docker-Registry-Auth': '{"username": "registry-user", "password": "registry-token"}',
                             },
                         )
+                        stored_auth = json.loads(
+                            self.service._docker_secret_path(contract.id).read_text()
+                        )
 
+        self.assertEqual(stored_auth, {"username": "registry-user", "password": "registry-token"})
         self.assertEqual(response.status_code, 202)
-        start_pull.assert_called_once_with(
-            ANY,
-            "example/runtime:1.0.0@sha256:example",
-            "registry-token",
-        )
+        start_pull.assert_called_once_with(ANY)
 
     def test_validate_contract_returns_json(self):
         contract = Contract.from_yaml(StringIO(VALID_CONTRACT))
@@ -465,10 +504,7 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["status"], "installing")
         self.assertEqual(payload["progress"], 42.5)
-        start_pull.assert_called_once_with(
-            ANY,
-            "example/runtime:1.0.0@sha256:example",
-        )
+        start_pull.assert_called_once_with(ANY)
 
     def test_list_contracts_omits_contract_body(self):
         contract, payload = stored_contract()
@@ -495,6 +531,7 @@ class EndpointStubTestCase(unittest.TestCase):
         )
 
     def test_pull_retries_and_resumes_after_error(self):
+        contract = Contract.from_yaml(StringIO(VALID_CONTRACT))
         with tempfile.TemporaryDirectory() as contract_directory:
             with patch.dict(
                 os.environ,
@@ -508,8 +545,8 @@ class EndpointStubTestCase(unittest.TestCase):
                     with patch.object(service, "_pull_retry_delay", return_value=0), patch.object(
                         service, "_schedule_contract"
                     ):
-                        service._pull_image("retry-contract", "example/runtime:1.0.0")
-                progress = service._read_progress("retry-contract")
+                        service._pull_image(contract)
+                progress = service._read_progress(contract.id)
 
         self.assertEqual(pull_image.call_count, 2)
         self.assertEqual(progress["status"], "available")
@@ -785,7 +822,7 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertIn("runtime", contract_schema["properties"])
         self.assertTrue(
             any(
-                parameter.get("name") == "X-Docker-Registry-API-Key"
+                parameter.get("name") == "X-Docker-Registry-Auth"
                 and parameter.get("in") == "header"
                 for parameter in parameters
             )

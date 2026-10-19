@@ -79,9 +79,9 @@ class ContractsResource(Resource):
     @contracts_namespace.doc(
         description="Create a contract and pull its referenced image asynchronously.",
         params={
-            "X-Docker-Registry-API-Key": {
+            "X-Docker-Registry-Auth": {
                 "in": "header",
-                "description": "Optional API key for Docker registry access.",
+                "description": 'JSON auth dictionary matching Docker images.pull auth_config: {"username": "user", "password": "token"}.',
                 "required": False,
             }
         },
@@ -96,7 +96,8 @@ class ContractsResource(Resource):
         202,
         "Contract created; image pull initiated; Location header returned",
     )
-    @contracts_namespace.response(400, "Contract is malformed", error_model)
+    @contracts_namespace.response(400, "Contract is malformed or registry credentials are incomplete", error_model)
+    @contracts_namespace.response(401, "Image pull permission denied", error_model)
     @contracts_namespace.response(409, "Contract already exists", error_model)
     @contracts_namespace.response(502, "Image pull failed", error_model)
     def post(self):
@@ -106,8 +107,27 @@ class ContractsResource(Resource):
                 "Unsupported media type in request.",
             ), 415
 
+        registry_auth_header = request.headers.get("X-Docker-Registry-Auth", "").strip()
+        registry_auth_params = None
+        if registry_auth_header:
+            try:
+                registry_auth_params = json.loads(registry_auth_header)
+                if not isinstance(registry_auth_params, dict) or not all(
+                    isinstance(registry_auth_params.get(key), str)
+                    and registry_auth_params[key].strip()
+                    for key in ("username", "password")
+                ):
+                    raise ValueError("Registry username and token must be supplied together.")
+            except ValueError as error:
+                return error_response(
+                    "INVALID_REGISTRY_CREDENTIALS",
+                    "Registry auth must be a JSON dictionary with username and token (password).",
+                    str(error),
+                ), 400
+
         service = _contract_service()
         scheduler = _scheduler_service()
+
         try:
             contract = service.parse_contract(request.get_data(as_text=True))
         except (ValidationError, TypeError, ValueError, KeyError, yaml.YAMLError) as error:
@@ -116,12 +136,16 @@ class ContractsResource(Resource):
         try:
             image_available = service.create_contract(
                 contract,
-                request.headers.get("X-Docker-Registry-API-Key"),
+                registry_auth_params,
             )
-
-
         except FileExistsError:
             return error_response("CONTRACT_EXISTS", "Contract already exists."), 409
+        except PermissionError as error:
+            return error_response(
+                "IMAGE_PULL_FAILED",
+                "Permission denied when pulling the runtime image.",
+                str(error),
+            ), 401
         except ConnectionError as error:
             return error_response(
                 "IMAGE_UNAVAILABLE",

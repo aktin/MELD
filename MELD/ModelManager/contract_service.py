@@ -8,7 +8,7 @@ import os
 import shutil
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -52,6 +52,9 @@ class ContractService:
 
     def _contract_path(self, contract_id: str) -> Path:
         return self._contract_directory() / contract_id / "contract.yaml"
+
+    def _docker_secret_path(self, contract_id: str) -> Path:
+        return self._contract_directory() / contract_id / ".docker-secret"
 
     def _progress_path(self, contract_id: str) -> Path:
         return self._contract_directory() / contract_id / "status.json"
@@ -102,45 +105,47 @@ class ContractService:
     def create_contract(
         self,
         contract: Contract,
-        registry_api_key: str | None = None,
+        auth_config: dict[str, Any] | None = None,
     ) -> bool:
         self.scheduler_service.validate_schedule(contract.schedule)
+        created = False
         try:
             image_ref = construct_image_ref(contract.runtime.image)
-        except Exception as error:
-            raise ConnectionError(str(error)) from error
 
-        with self._contract_operation_lock:
-            existing_contract = self._find_duplicate(contract)
-            if existing_contract is not None:
-                pull_state = self._get_pull_status(existing_contract.id)
-                if not pull_state or pull_state.get("status") != "failed":
-                    raise FileExistsError(existing_contract.id)
-                self._start_image_pull(
-                    existing_contract,
-                    image_ref,
-                    registry_api_key,
+            with self._contract_operation_lock:
+                existing_contract = self._find_duplicate(contract)
+                if existing_contract is not None:
+                    pull_state = self._get_pull_status(existing_contract.id)
+                    if not pull_state or pull_state.get("status") != "failed":
+                        raise FileExistsError(existing_contract.id)
+                    if auth_config:
+                        self._store_docker_image_secret(auth_config, existing_contract)
+                    self._start_image_pull(existing_contract)
+                    return False
+
+                contract.assign_id(force=True)
+
+                image_available = self._image_available(image_ref)
+                self._store_contract(contract)
+                created = True
+
+                if auth_config:
+                    self._store_docker_image_secret(auth_config, contract)
+
+                if image_available:
+                    self._track_pull_progress(contract.id, "available")
+                    self._schedule_contract(contract.id)
+                else:
+                    self._start_image_pull(contract)
+        except Exception:
+            if created:
+                shutil.rmtree(
+                    self._contract_path(contract.id).parent,
+                    ignore_errors=True,
                 )
-                return False
+            raise
 
-            contract.assign_id(force=True)
-
-            image_available = self._image_available(image_ref)
-            self._store_contract(contract)
-            if image_available:
-                self._track_pull_progress(contract.id, "available")
-                self._schedule_contract(contract.id)
-            else:
-                try:
-                    self._start_image_pull(contract, image_ref, registry_api_key)
-                except Exception:
-                    shutil.rmtree(
-                        self._contract_path(contract.id).parent,
-                        ignore_errors=True,
-                    )
-                    raise
-
-            return image_available
+        return image_available
 
     def delete_contract(self, contract_id: str) -> None:
         contract = self.get_contract(contract_id)
@@ -182,16 +187,18 @@ class ContractService:
 
     def _pull_runtime_image(
         self,
-        image_ref: str,
+        contract: Contract,
         progress_callback: Callable,
-        registry_api_key: str | None = None,
     ) -> None:
         from ModelEnvironment.docker_runtime import pull_image
 
-        pull_kwargs: dict[str, Any] = {"progress_callback": progress_callback}
-        if registry_api_key:
-            pull_kwargs["registry_api_key"] = registry_api_key
-        pull_image(image_ref, **pull_kwargs)
+        path = self._docker_secret_path(contract.id)
+        auth_config = json.loads(path.read_text()) if path.exists() else None
+        pull_image(
+            construct_image_ref(contract.runtime.image),
+            progress_callback=progress_callback,
+            auth_config=auth_config,
+        )
 
     def _read_progress(self, contract_id: str) -> dict[str, Any] | None:
         path = self._progress_path(contract_id)
@@ -294,24 +301,36 @@ class ContractService:
 
     def _pull_image(
         self,
-        contract_id: str,
-        image_ref: str,
-        registry_api_key: str | None = None,
+        contract: Contract,
+        started: Future | None = None,
     ) -> None:
+        contract_id = contract.id
+
+        def track_progress(event):
+            self._track_pull_progress(contract_id, event)
+            if started is not None and not started.done():
+                started.set_result(None)
+
         retry_number = 0
         while True:
             try:
                 self._track_pull_progress(contract_id, "pulling")
                 self._pull_runtime_image(
-                    image_ref,
-                    lambda event: self._track_pull_progress(contract_id, event),
-                    registry_api_key,
+                    contract,
+                    track_progress,
                 )
+            except PermissionError as error:
+                self._track_pull_progress(contract_id, "failed", str(error))
+                if started is not None and not started.done():
+                    started.set_exception(error)
+                return
             except Exception as error:
+                if started is not None and not started.done():
+                    started.set_result(None)
                 retry_number += 1
                 logger.warning(
                     "Unable to pull image %s; retrying attempt %s: %s",
-                    image_ref,
+                    construct_image_ref(contract.runtime.image),
                     retry_number,
                     error,
                 )
@@ -319,12 +338,20 @@ class ContractService:
                 time.sleep(self._pull_retry_delay(retry_number))
                 continue
 
+            if started is not None and not started.done():
+                started.set_result(None)
             self._track_pull_progress(contract_id, "available")
             self._schedule_contract(contract_id)
             return
 
     def _schedule_contract(self, contract_id: str) -> None:
         self.scheduler_service.add_job(self.get_contract(contract_id))
+
+    def restart_image_pull(self) -> None:
+        for contract in self.get_contracts():
+            status, _ = self._installation_status(contract)
+            if status == "installing":
+                self._pull_image(contract)
 
     def restore_scheduler_jobs(self) -> None:
         for contract in self.get_contracts():
@@ -345,20 +372,22 @@ class ContractService:
     def _start_image_pull(
         self,
         contract: Contract,
-        image_ref: str,
-        registry_api_key: str | None = None,
     ) -> None:
         self._track_pull_progress(contract.id, "pulling")
         with self._pull_state_lock:
             existing_future = self._pull_futures.get(contract.id)
             if existing_future is not None and not existing_future.done():
                 return
+            started = Future()
             self._pull_futures[contract.id] = self._pull_executor.submit(
                 self._pull_image,
-                contract.id,
-                image_ref,
-                registry_api_key,
+                contract,
+                started,
             )
+        try:
+            started.result(timeout=1)
+        except TimeoutError:
+            pass
 
     def _installation_status(self, contract: Contract) -> tuple[str, float | None]:
         pull_state = self._get_pull_status(contract.id)
@@ -397,10 +426,7 @@ class ContractService:
             pull_state = self._get_pull_status(contract.id)
             if pull_state is None or pull_state.get("status") == "failed":
                 try:
-                    self._start_image_pull(
-                        contract,
-                    construct_image_ref(contract.runtime.image),
-                    )
+                    self._start_image_pull(contract)
                 except Exception as error:
                     logger.exception(
                         "Unable to queue image installation for contract %s: %s",
@@ -430,5 +456,15 @@ class ContractService:
             path.unlink(missing_ok=True)
             raise
 
+    def _store_docker_image_secret(self, auth_config: dict[str, Any], contract: Contract) -> None:
+        path = self._docker_secret_path(contract.id)
+        try:
+            with path.open("w", encoding="utf-8") as f:
+                json.dump(auth_config, f)
+        except FileExistsError:
+            raise
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
 
 __all__ = ["ContractService"]

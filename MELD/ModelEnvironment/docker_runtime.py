@@ -57,7 +57,7 @@ def stream_container_logs(container: Container, job_context: ExecutionContext) -
 def pull_image(
     image: str,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
-    registry_api_key: str | None = None,
+    auth_config: dict[str, Any] | None = None,
 ) -> None:
     """
     Pulls a runtime image from the Docker registry.
@@ -67,8 +67,8 @@ def pull_image(
         The name of the Docker image to pull, including the tag (if applicable).
     progress_callback: Callable[[dict[str, Any]], None] | None
         Optional callback invoked for each decoded Docker pull event.
-    registry_api_key: str | None
-        Optional one-off registry identity token for this pull request.
+    auth_config: dict[str, Any] | None
+        Optional registry authentication dictionary passed to Docker's pull command.
 
     Raises:
     RuntimeError
@@ -77,11 +77,6 @@ def pull_image(
     """
     try:
         logger.info(f"Pulling runtime image {image}")
-        auth_config = (
-            {"identitytoken": registry_api_key}
-            if registry_api_key
-            else None
-        )
         if progress_callback is None:
             if auth_config:
                 _client().images.pull(image, auth_config=auth_config)
@@ -99,11 +94,18 @@ def pull_image(
                 progress_callback(event)
         logger.info(f"Pulled runtime image {image}")
     except NotFound as e:
-        error = f"Runtime image {image} not found"
+        error = f"Runtime image {image} not found: {e}"
         # logger.exception(error)
         raise RuntimeError(error)
-    except APIError as e:
-        error = f"Failed to pull image {image}"
+    except (APIError, RuntimeError) as e:
+        if getattr(e, "status_code", None) in {401, 403} or any(
+            marker in str(e).lower()
+            for marker in ("denied", "unauthorized", "authentication required")
+        ):
+            raise PermissionError(str(e)) from e
+        if isinstance(e, RuntimeError):
+            raise
+        error = f"Failed to pull image {image}: {e}"
         # logger.exception(error)
         raise RuntimeError(error) from e
 
