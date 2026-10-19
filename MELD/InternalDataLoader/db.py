@@ -6,10 +6,10 @@ from sqlalchemy import create_engine
 
 logger = logging.getLogger("meld")
 
-host = os.getenv("DB_HOST")
-port = os.getenv("DB_PORT")
-user = os.getenv("DB_USER")
-schema = os.getenv("DB_SCHEMA")
+host = os.getenv("DB_HOST", default="localhost")
+port = os.getenv("DB_PORT", default="5432")
+user = os.getenv("DB_USER", default="i2b2crcdata")
+schema = os.getenv("DB_SCHEMA", default="i2b2")
 password_file = os.getenv("DB_PASSWORD_FILE")
 
 try:
