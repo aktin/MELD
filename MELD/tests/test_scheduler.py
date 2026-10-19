@@ -1,4 +1,5 @@
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,7 @@ except ModuleNotFoundError:
 from apscheduler.jobstores.base import JobLookupError
 
 from ExecutionScheduler import SchedulerService
+from ExecutionScheduler.scheduler import _start_execution
 from ModelManager import Contract
 
 
@@ -93,7 +95,9 @@ class SchedulerServiceTest(unittest.TestCase):
                 service.add_job(contract)
 
             args, kwargs = add_job.call_args
-            self.assertIs(args[0], execution_service.start_execution)
+            self.assertIs(args[0], _start_execution)
+            args[0](*kwargs["args"])
+            execution_service.start_execution.assert_called_once_with(contract.id)
             self.assertEqual(kwargs["args"], [contract.id])
             self.assertEqual(kwargs["id"], contract.id)
             self.assertEqual(kwargs["jobstore"], "default")
@@ -137,14 +141,22 @@ class SchedulerServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             schedule_dir = Path(directory) / "schedules"
             contract = self.contract({"expression": "* * * * *"})
-            first = self.service(schedule_dir)
+            first_execution_service = MagicMock()
+            first_execution_service._execution_lock = threading.RLock()
+            first = self.service(schedule_dir, first_execution_service)
             first.add_job(contract)
             first.start()
             first._scheduler.shutdown(wait=False)
 
-            second = self.service(schedule_dir)
+            second_execution_service = MagicMock()
+            second_execution_service._execution_lock = threading.RLock()
+            second = self.service(schedule_dir, second_execution_service)
             second.start()
-            self.assertIsNotNone(second._scheduler.get_job(contract.id, jobstore="default"))
+            job = second._scheduler.get_job(contract.id, jobstore="default")
+            self.assertIsNotNone(job)
+            job.func(*job.args, **job.kwargs)
+            second_execution_service.start_execution.assert_called_once_with(contract.id)
+            first_execution_service.start_execution.assert_not_called()
             second.add_job(contract)
             self.assertEqual(len(second._scheduler.get_jobs()), 1)
             second.remove_job(contract)

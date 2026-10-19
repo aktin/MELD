@@ -8,9 +8,18 @@ from apscheduler.triggers.cron import CronTrigger
 from ModelManager import Contract
 from utils.config import SCHEDULE_DIR
 
+_execution_service = None
+
+
+def _start_execution(contract_id: str):
+    return _execution_service.start_execution(contract_id)
+
+
 class SchedulerService:
 
     def __init__(self, execution_service: "ExecutionService"):
+        global _execution_service
+        _execution_service = execution_service
         self.execution_service = execution_service
         self._create_schedules_folder()
 
@@ -39,7 +48,7 @@ class SchedulerService:
             return
 
         self.validate_schedule(schedule)
-        self._scheduler.add_job(self.execution_service.start_execution,
+        self._scheduler.add_job(_start_execution,
                                 CronTrigger.from_crontab(schedule.expression, schedule.timezone),
                                 args=[contract.id],
                                 id=contract.id,
