@@ -671,4 +671,4 @@ Must be one of:
 | **Same definition as**    | [input_schema_features_items](#input_schema_features_items) |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-10-19 at 12:05:32 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2026-10-23 at 09:10:07 +0000
