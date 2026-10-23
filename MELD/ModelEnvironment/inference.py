@@ -33,6 +33,7 @@ class InferenceRunner:
         self.image = job_context.image_ref
         self.output_zip_path = Path(job_context.output_data_path) / "summarized_execution.zip"
         self.runtime_container: Optional[Container] = None
+        self._runtime_stopped = False
 
     def run(self) -> Path | None:
         """
@@ -67,6 +68,7 @@ class InferenceRunner:
                 return self.output_zip_path
 
             stop_container(self.runtime_container, self.job_context)
+            self._runtime_stopped = True
             timespan = self.monitor.stop_inference_time()
 
             self.job_context.logger.info(f"Inference finished in {timespan.total_seconds():.3f} seconds")
@@ -78,7 +80,6 @@ class InferenceRunner:
                 raise Exception(error)
             else:
                 self.job_context.logger.info("Inference has completed successfully")
-                self.job_context.set_status(ExecutionStatus.SUCCESS)
 
             archived_output_data = self.get_output_data_from_container()
             archive_bytes = self.extract_result_file(archived_output_data)
@@ -86,7 +87,6 @@ class InferenceRunner:
             output_df = self._csv_as_bytes_to_df(archive_bytes)
             self.verify_result_data(output_df)
             self.collect_result_metrics(output_df)
-            destroy_container(self.runtime_container, self.job_context)
 
         except Exception as e:
             self.job_context.logger.exception(f"An exception occurred during inference: {e}")
@@ -96,10 +96,10 @@ class InferenceRunner:
                 self.pack_archive(archive_bytes)
             finally:
                 self.job_context.set_cancel_callback(None)
-                if self._cancel_requested():
-                    self.job_context.set_status(ExecutionStatus.CANCELED)
-                    if self.runtime_container is not None:
-                        destroy_container(self.runtime_container, self.job_context)
+                if self.runtime_container is not None:
+                    if not self._runtime_stopped:
+                        self._stop_runtime_container()
+                    destroy_container(self.runtime_container, self.job_context)
                 self.job_context.logger.info("Inference execution completed")
 
         return self.output_zip_path
@@ -113,6 +113,7 @@ class InferenceRunner:
 
         try:
             stop_container(self.runtime_container, self.job_context)
+            self._runtime_stopped = True
         except Exception:
             self.job_context.logger.exception("Failed to stop canceled runtime container")
 

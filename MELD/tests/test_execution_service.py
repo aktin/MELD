@@ -1,6 +1,7 @@
 import threading
 import tempfile
 import unittest
+import zipfile
 from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,15 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self):
         self.service._execution_executor.shutdown(wait=True, cancel_futures=True)
+
+    def cancel_context(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        for name in ("input", "output", "logs"):
+            (root / name).mkdir()
+        return MagicMock(status=ExecutionStatus.PENDING, input_data_path=root / "input",
+                         output_data_path=root / "output", logs_path=root / "logs")
 
     @patch("ModelEnvironment.execution_service.ExecutionContext.create")
     @patch("ModelEnvironment.execution_service.Contract.from_yaml")
@@ -48,7 +58,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
         release.set()
 
     def test_cancel_execution_cancels_matching_future_and_context(self):
-        context = MagicMock(execution_id="execution-id")
+        context = self.cancel_context()
         future = Future()
         self.service.current_inference = future
         self.service.current_execution_id = "execution-id"
@@ -70,7 +80,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
     ):
         self.service = ExecutionService()
         active_context = MagicMock(execution_id="active-id")
-        requested_context = MagicMock(execution_id="requested-id")
+        requested_context = self.cancel_context()
         self.service.current_context = active_context
         self.service.current_execution_id = "active-id"
         self.service.current_inference = Future()
@@ -86,7 +96,7 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
         requested_context.set_status.assert_called_once_with(ExecutionStatus.CANCELED)
 
     def test_cancel_execution_cancels_queued_execution(self):
-        context = MagicMock(status=ExecutionStatus.PENDING)
+        context = self.cancel_context()
         future = Future()
         self.service._execution_tasks["queued-id"] = (future, context)
 
@@ -99,6 +109,49 @@ class ExecutionServiceTest(unittest.IsolatedAsyncioTestCase):
         context.set_status.assert_called_once_with(ExecutionStatus.CANCELED)
         self.assertTrue(future.cancelled())
         self.assertNotIn("queued-id", self.service._execution_tasks)
+
+    def test_queued_cancellation_creates_archive_before_publishing_status(self):
+        context = self.cancel_context()
+        (context.logs_path / "execution.log").write_text("queued")
+        future = Future()
+        self.service._execution_tasks["queued-id"] = (future, context)
+
+        def check_archive(status):
+            with zipfile.ZipFile(context.output_data_path / "summarized_execution.zip") as archive:
+                self.assertEqual(archive.read("logs/execution.log"), b"queued")
+            self.assertEqual(status, ExecutionStatus.CANCELED)
+
+        context.set_status.side_effect = check_archive
+        with patch.object(self.service, "_check_contract_exists"), patch.object(
+            self.service, "_check_execution_exists"
+        ):
+            self.assertTrue(self.service.cancel_execution("contract-id", "queued-id"))
+        self.assertTrue(future.cancelled())
+
+    def test_get_execution_hides_terminal_status_until_worker_finishes(self):
+        context = MagicMock(status={"status": "FAILED"})
+        future = Future()
+        future.set_running_or_notify_cancel()
+        self.service._execution_tasks["execution-id"] = (future, context)
+        with patch.object(self.service, "_check_contract_exists"), patch.object(
+            self.service, "_check_execution_exists"
+        ), patch("ModelEnvironment.execution_service.ExecutionContext.create", return_value=context):
+            result = self.service.get_execution("contract-id", "execution-id")
+        self.assertEqual(result.status, {"status": "RUNNING"})
+        future.set_result(None)
+
+    def test_deletion_waits_for_worker_with_terminal_status(self):
+        context = MagicMock(status=ExecutionStatus.SUCCESS)
+        future = Future()
+        future.set_running_or_notify_cancel()
+        self.service._execution_tasks["execution-id"] = (future, context)
+        with patch.object(self.service, "_check_contract_exists"), patch.object(
+            self.service, "_check_execution_exists"
+        ), patch.object(future, "result") as wait:
+            self.service.cancel_execution("contract-id", "execution-id", wait=True)
+        wait.assert_called_once_with()
+        context.request_cancel.assert_not_called()
+        future.set_result(None)
 
     def test_cancel_execution_returns_false_for_completed_execution(self):
         for status in (

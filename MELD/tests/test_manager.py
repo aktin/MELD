@@ -127,6 +127,27 @@ class ManagerTest(unittest.TestCase):
         )
         monitor.stop_total_execution_time.assert_called_once_with()
 
+    def test_success_is_published_after_metrics_archive_is_closed(self):
+        data = pd.DataFrame({"age": pd.Series([1], dtype="int64")})
+        with tempfile.TemporaryDirectory() as directory:
+            self.context.output_data_path = Path(directory)
+            monitor = MagicMock()
+            monitor.collect_metrics.return_value = {"rows": 1}
+
+            def check_archive(status):
+                if status == ExecutionStatus.SUCCESS:
+                    with zipfile.ZipFile(Path(directory) / "summarized_execution.zip") as archive:
+                        self.assertEqual(json.loads(archive.read("metrics.json")), {"rows": 1})
+
+            self.context.set_status.side_effect = check_archive
+            with patch.object(manager, "ExecutionMonitor", return_value=monitor), patch.object(
+                manager, "ensure_image_exists"
+            ), patch.object(manager, "query_data", return_value=data), patch.object(
+                manager, "run_runtime_inference"
+            ):
+                manager.run_inference(self.contract, self.context)
+        self.context.set_status.assert_called_with(ExecutionStatus.SUCCESS)
+
     def test_pull_and_remove_runtime_use_contract_image_and_swallow_failures(self):
         with patch.object(manager, "pull_image") as pull, patch.object(manager, "delete_image") as delete:
             manager.pull_runtime(self.contract)

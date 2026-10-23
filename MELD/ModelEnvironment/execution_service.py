@@ -58,6 +58,10 @@ class ExecutionService:
         self._check_execution_exists(contract_id, execution_id)
 
         ctx = ExecutionContext.create(contract_id, execution_id)
+        with self._execution_lock:
+            task = self._execution_tasks.get(execution_id)
+            if task is not None and not task[0].done() and _status_value(ctx) in FINAL_EXECUTION_STATES:
+                ctx.status = {"status": ExecutionStatus.RUNNING.value}
         return ctx
 
     def start_execution(self, contract_id: str) -> str:
@@ -123,29 +127,33 @@ class ExecutionService:
             if task is not None:
                 future, ctx = task
                 status = _status_value(ctx)
-                if status in FINAL_EXECUTION_STATES or future.done() and not future.cancelled():
-                    return False
-
-                ctx.request_cancel()
-                ctx.set_status(ExecutionStatus.CANCELED)
-                if future.cancel():
-                    # The task had not started, so no inference cleanup needs
-                    # to run before the cancellation request is complete.
-                    self._execution_tasks.pop(execution_id, None)
-                    if self.current_inference is future:
-                        self.current_inference = None
-                        self.current_execution_id = None
-                        self.current_context = None
-                else:
-                    # A running future cannot be force-canceled. Its context
-                    # callback stops runtime work and run_inference performs
-                    # the remaining cleanup in its finally block.
+                if status in FINAL_EXECUTION_STATES:
+                    if not wait or future.done():
+                        return False
                     future_to_wait = future
+                elif future.done() and not future.cancelled():
+                    return False
+                else:
+                    ctx.request_cancel()
+                    if future.cancel():
+                        self._finish_canceled_execution(ctx)
+                        # The task had not started, so no inference cleanup needs
+                        # to run before the cancellation request is complete.
+                        self._execution_tasks.pop(execution_id, None)
+                        if self.current_inference is future:
+                            self.current_inference = None
+                            self.current_execution_id = None
+                            self.current_context = None
+                    else:
+                        # A running future cannot be force-canceled. Its context
+                        # callback stops runtime work and run_inference performs
+                        # the remaining cleanup in its finally block.
+                        future_to_wait = future
 
         if future_to_wait is not None and wait:
             # Contract deletion uses this barrier before deleting its storage.
             future_to_wait.result()
-            return
+            return True
 
         if task is not None:
             return True
@@ -157,8 +165,18 @@ class ExecutionService:
             return False
 
         ctx.request_cancel()
-        ctx.set_status(ExecutionStatus.CANCELED)
+        self._finish_canceled_execution(ctx)
         return True
+
+    def _finish_canceled_execution(self, ctx: ExecutionContext) -> None:
+        archive_path = Path(ctx.output_data_path) / "summarized_execution.zip"
+        with zipfile.ZipFile(archive_path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for directory, prefix in ((ctx.input_data_path, "input"), (ctx.logs_path, "logs")):
+                directory = Path(directory)
+                for path in directory.rglob("*"):
+                    if path.is_file():
+                        archive.write(path, f"{prefix}/{path.relative_to(directory).as_posix()}")
+        ctx.set_status(ExecutionStatus.CANCELED)
 
     def get_result_archive(self, contract_id: str, execution_id: str):
         """Read a completed execution archive into an independent byte stream."""

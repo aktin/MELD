@@ -130,8 +130,24 @@ class InferenceRunnerTest(unittest.TestCase):
         start.assert_called_once()
         stop.assert_called_once()
         pack.assert_called_once()
-        self.context.set_status.assert_any_call(ExecutionStatus.SUCCESS)
+        self.assertNotIn(unittest.mock.call(ExecutionStatus.SUCCESS), self.context.set_status.call_args_list)
         self.context.set_cancel_callback.assert_any_call(None)
+
+    def test_failed_runtime_is_removed_even_when_archive_packing_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = self.runner(directory)
+            with patch("ModelEnvironment.inference.get_image_size", return_value=10), patch(
+                "ModelEnvironment.inference.create_container", return_value=MagicMock()
+            ), patch("ModelEnvironment.inference.start_container"), patch(
+                "ModelEnvironment.inference.wait_for_container", return_value=1
+            ), patch("ModelEnvironment.inference.stop_container"), patch.object(
+                runner, "create_interface_folders"
+            ), patch.object(runner, "copy_data_to_container"), patch.object(
+                runner, "pack_archive", side_effect=OSError("archive failed")
+            ):
+                with self.assertRaisesRegex(OSError, "archive failed"):
+                    runner.run()
+            runner.runtime_container.remove.assert_called_once_with()
 
     def test_run_stops_before_starting_container_when_cancelled(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -147,7 +163,7 @@ class InferenceRunnerTest(unittest.TestCase):
 
         start.assert_not_called()
         runner.runtime_container.remove.assert_called_once_with()
-        self.context.set_status.assert_called_with(ExecutionStatus.CANCELED)
+        self.assertNotIn(unittest.mock.call(ExecutionStatus.CANCELED), self.context.set_status.call_args_list)
 
     def test_run_destroys_container_when_cancelled_while_running(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -169,7 +185,7 @@ class InferenceRunnerTest(unittest.TestCase):
 
         runner.runtime_container.stop.assert_called_once_with()
         runner.runtime_container.remove.assert_called_once_with()
-        self.context.set_status.assert_called_with(ExecutionStatus.CANCELED)
+        self.assertNotIn(unittest.mock.call(ExecutionStatus.CANCELED), self.context.set_status.call_args_list)
 
 
 if __name__ == "__main__":

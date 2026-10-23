@@ -72,9 +72,9 @@ class ContractServiceTest(unittest.TestCase):
         ) as start_pull:
             self.service.register_contract(contract, {"username": "user", "password": "token", "serveraddress": "registry.example"})
             start_pull.assert_called_once_with(contract)
-            with patch.object(self.service, "_pull_image") as pull:
-                self.service.restart_image_pull()
-            pull.assert_called_once_with(contract)
+            start_pull.reset_mock()
+            self.service.restart_image_pull()
+            start_pull.assert_called_once_with(contract)
 
     def test_image_reference_can_omit_digest_when_configured(self):
         contract = self.contract()
@@ -295,6 +295,50 @@ class ContractServiceTest(unittest.TestCase):
         scheduler.add_job.assert_called_once()
         scheduled_contract = scheduler.add_job.call_args.args[0]
         self.assertEqual(scheduled_contract.id, contract.id)
+
+    def test_restore_scheduler_jobs_resumes_interrupted_installation(self):
+        contract = self.contract()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ), patch.object(self.service, "_start_image_pull") as start_pull:
+            self.service._store_contract(contract)
+            self.service._track_pull_progress(contract.id, "pulling")
+            self.service.restore_scheduler_jobs()
+            start_pull.assert_called_once_with(contract)
+        self.scheduler_service.start.assert_called_once()
+
+    def test_delete_contract_waits_for_running_image_pull(self):
+        contract = self.contract()
+        started = threading.Event()
+        release = threading.Event()
+        deleted = threading.Event()
+
+        def pull(*args):
+            started.set()
+            release.wait(timeout=2)
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
+        ), patch.object(self.service, "_pull_runtime_image", side_effect=pull), patch(
+            "ModelManager.remove_runtime"
+        ):
+            self.service._store_contract(contract)
+            self.service._start_image_pull(contract)
+            self.assertTrue(started.wait(timeout=2))
+            thread = threading.Thread(target=lambda: (
+                self.service.deregister_contract(contract.id), deleted.set()
+            ))
+            thread.start()
+            try:
+                self.assertTrue(self.service._pull_cancel_events[contract.id].wait(timeout=2))
+                self.assertFalse(deleted.is_set())
+                self.assertTrue(self.service._contract_path(contract.id).exists())
+            finally:
+                release.set()
+                thread.join(timeout=2)
+            self.assertTrue(deleted.is_set())
+            self.assertFalse(self.service._contract_path(contract.id).parent.exists())
+            self.scheduler_service.add_job.assert_not_called()
 
     def test_invalid_progress_file_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(

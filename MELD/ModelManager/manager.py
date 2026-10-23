@@ -76,6 +76,7 @@ def run_inference(contract: Contract, ctx: ExecutionContext = None) -> None:
     provider = ContextProvider(ctx)
     monitor = ExecutionMonitor(provider)
     monitor.start_total_execution_time()
+    final_status = ExecutionStatus.SUCCESS
     try:
         ctx.logger.info("Preparing inference")
         ctx.set_status(ExecutionStatus.PREPARING)
@@ -100,16 +101,19 @@ def run_inference(contract: Contract, ctx: ExecutionContext = None) -> None:
 
         run_runtime_inference(x, ctx, monitor)
     except Exception as e:
-        ctx.set_status(ExecutionStatus.FAILED)
+        final_status = ExecutionStatus.FAILED
         ctx.logger.exception(f"An exception occurred during inference: {e}")
     finally:
         monitor.stop_total_execution_time()
 
         zip_path = Path(ctx.output_data_path) / "summarized_execution.zip"
-        pack_metrics(zip_path, ctx, monitor)
+        try:
+            pack_metrics(zip_path, ctx, monitor)
+        except Exception:
+            ctx.set_status(ExecutionStatus.FAILED)
+            raise
 
-        if ctx.cancel_requested:
-            ctx.set_status(ExecutionStatus.CANCELED)
+        ctx.set_status(ExecutionStatus.CANCELED if ctx.cancel_requested else final_status)
 
         ctx.logger.info(f"Output data saved to {zip_path}")
 

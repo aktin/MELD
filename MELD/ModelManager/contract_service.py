@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 import threading
-import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -45,6 +44,7 @@ class ContractService:
         self._contract_operation_lock = threading.Lock()
         self._pull_state_lock = threading.Lock()
         self._pull_futures: dict[str, Any] = {}
+        self._pull_cancel_events: dict[str, threading.Event] = {}
         self._pull_executor = ThreadPoolExecutor(max_workers=1)
 
     def _contract_directory(self) -> Path:
@@ -128,6 +128,7 @@ class ContractService:
                 image_available = self._image_available(image_ref)
                 self._store_contract(contract)
                 created = True
+                self._pull_cancel_events[contract.id] = threading.Event()
 
                 if auth_config:
                     self._store_docker_image_secret(auth_config, contract)
@@ -150,6 +151,14 @@ class ContractService:
     def deregister_contract(self, contract_id: str) -> None:
         contract = self.get_contract(contract_id)
 
+        with self._pull_state_lock:
+            cancel_event = self._pull_cancel_events.setdefault(contract_id, threading.Event())
+            cancel_event.set()
+            pull_future = self._pull_futures.get(contract_id)
+        if pull_future is not None:
+            if not pull_future.cancel():
+                pull_future.result()
+
         # delete schedule if exists, otherwise do nothing
         # delete schedule first to avoid nwely created jobs which might cause racing conditions
         try:
@@ -160,15 +169,11 @@ class ContractService:
         executions = self.execution_service.get_executions(contract_id)
 
         for execution in executions:
-            status = execution["status"]
-            if isinstance(status, dict):
-                status = status.get("status")
-            if status not in {"SUCCESS", "FAILED", "CANCELED", "TIMEOUT"}:
-                self.execution_service.cancel_execution(
-                    contract_id,
-                    execution["execution_id"],
-                    wait=True,
-                )
+            self.execution_service.cancel_execution(
+                contract_id,
+                execution["execution_id"],
+                wait=True,
+            )
 
         from ModelManager import remove_runtime
 
@@ -307,13 +312,15 @@ class ContractService:
     ) -> None:
         contract_id = contract.id
 
+        cancel_event = self._pull_cancel_events.setdefault(contract_id, threading.Event())
+
         def track_progress(event):
             self._track_pull_progress(contract_id, event)
             if started is not None and not started.done():
                 started.set_result(None)
 
         retry_number = 0
-        while True:
+        while not cancel_event.is_set():
             try:
                 self._track_pull_progress(contract_id, "pulling")
                 self._pull_runtime_image(
@@ -321,11 +328,15 @@ class ContractService:
                     track_progress,
                 )
             except PermissionError as error:
+                if cancel_event.is_set():
+                    return
                 self._track_pull_progress(contract_id, "failed", str(error))
                 if started is not None and not started.done():
                     started.set_exception(error)
                 return
             except Exception as error:
+                if cancel_event.is_set():
+                    return
                 if started is not None and not started.done():
                     started.set_result(None)
                 retry_number += 1
@@ -336,11 +347,13 @@ class ContractService:
                     error,
                 )
                 self._track_pull_progress(contract_id, "pulling", str(error))
-                time.sleep(self._pull_retry_delay(retry_number))
+                cancel_event.wait(self._pull_retry_delay(retry_number))
                 continue
 
             if started is not None and not started.done():
                 started.set_result(None)
+            if cancel_event.is_set():
+                return
             self._track_pull_progress(contract_id, "available")
             self._schedule_contract(contract_id)
             return
@@ -352,13 +365,15 @@ class ContractService:
         for contract in self.get_contracts():
             status, _ = self._installation_status(contract)
             if status == "installing":
-                self._pull_image(contract)
+                self._start_image_pull(contract)
 
     def restore_scheduler_jobs(self) -> None:
         for contract in self.get_contracts():
             status, _ = self._installation_status(contract)
             if status == "ready":
                 self._schedule_contract(contract.id)
+            else:
+                self._start_image_pull(contract)
 
         self.scheduler_service.start()
 
@@ -376,8 +391,10 @@ class ContractService:
         self,
         contract: Contract,
     ) -> None:
-        self._track_pull_progress(contract.id, "pulling")
         with self._pull_state_lock:
+            if self._pull_cancel_events.setdefault(contract.id, threading.Event()).is_set():
+                return
+            self._track_pull_progress(contract.id, "pulling")
             existing_future = self._pull_futures.get(contract.id)
             if existing_future is not None and not existing_future.done():
                 return
