@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 logger = logging.getLogger("meld")
 
@@ -23,3 +23,8 @@ except TypeError:
     exit(1)
 
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{schema}")
+
+
+def check_connection() -> bool:
+    with engine.connect() as connection:
+        return connection.execute(text("SELECT 1")).scalar() == 1

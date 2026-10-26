@@ -23,6 +23,18 @@ class DockerRuntimeTest(unittest.TestCase):
     def tearDown(self):
         docker_runtime.client = None
 
+    def test_health_check_pings_and_closes_separate_client(self):
+        with patch.object(docker_runtime.docker, "from_env") as from_env:
+            health_client = from_env.return_value.__enter__.return_value
+            health_client.ping.return_value = True
+
+            self.assertTrue(docker_runtime.check_daemon_access())
+
+        from_env.assert_called_once_with(timeout=5)
+        health_client.ping.assert_called_once_with()
+        from_env.return_value.__exit__.assert_called_once()
+        self.assertIs(docker_runtime.client, self.client)
+
     def test_pull_image_supports_plain_and_authenticated_pulls(self):
         docker_runtime.pull_image("image:tag")
         docker_runtime.pull_image("private/image:tag", auth_config={"username": "user", "password": "token", "serveraddress": "registry.example"})
