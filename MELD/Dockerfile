@@ -1,6 +1,6 @@
 FROM python:3.14-slim
 
-LABEL org.opencontainers.image.version="0.2.1-SNAPSHOT"
+LABEL org.opencontainers.image.version="0.3.0"
 LABEL org.opencontainers.image.title="MELD Orchestrator"
 LABEL org.opencontainers.image.description="The MELD (Medical Learning and Deployment) Orchestrator enables clinicians and researchers\
 to run their own trained ML models."
