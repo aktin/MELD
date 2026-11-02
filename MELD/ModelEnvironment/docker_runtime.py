@@ -24,6 +24,11 @@ def _client():
     return client
 
 
+def check_daemon_access() -> bool:
+    with docker.from_env(timeout=5) as health_client:
+        return health_client.ping()
+
+
 def stream_container_logs(container: Container, job_context: ExecutionContext) -> None:
     """
     Streams the stdout and stderr output of a container and processes them in real-time.
@@ -76,11 +81,11 @@ def pull_image(
         an error during the attempt to pull the image.
     """
     try:
-        if "@" in image:
-            name, digest = image.split("@", 1)
-            if ":" in name.rsplit("/", 1)[-1]:
-                name = name.rsplit(":", 1)[0]
-            image = f"{name}@{digest}"
+        # if "@" in image:
+        #     name, digest = image.split("@", 1)
+        #     if ":" in name.rsplit("/", 1)[-1]:
+        #         name = name.rsplit(":", 1)[0]
+        #     image = f"{name}@{digest}"
         logger.info(f"Pulling runtime image {image}")
         if progress_callback is None:
             if auth_config:
@@ -100,7 +105,6 @@ def pull_image(
         logger.info(f"Pulled runtime image {image}")
     except NotFound as e:
         error = f"Runtime image {image} not found: {e}"
-        # logger.exception(error)
         raise RuntimeError(error)
     except (APIError, RuntimeError) as e:
         if getattr(e, "status_code", None) in {401, 403} or any(
@@ -111,7 +115,6 @@ def pull_image(
         if isinstance(e, RuntimeError):
             raise
         error = f"Failed to pull image {image}: {e}"
-        # logger.exception(error)
         raise RuntimeError(error) from e
 
 

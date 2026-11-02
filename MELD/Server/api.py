@@ -7,10 +7,7 @@ from werkzeug.utils import cached_property
 from Logger import get_meld_logger
 from ModelManager import Contract
 
-try:
-    from __version__ import version as API_VERSION
-except ImportError:  # pragma: no cover - supports importing the module standalone
-    API_VERSION = "0.1.0"
+from __version__ import version as API_VERSION
 
 logger = get_meld_logger()
 

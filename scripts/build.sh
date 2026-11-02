@@ -1,8 +1,11 @@
 #!/bin/sh
 
-image_name="meld-orchestrator"
-version="0.2.1-SNAPSHOT"
+set -eu
 
-cd ../MELD
+image_name="meld-orchestrator"
+
+cd "$(dirname "$0")/../MELD"
+version=$(cat VERSION)
 docker build -t "ghcr.io/simhue/$image_name:$version" \
+        --build-arg "IMAGE_VERSION=$version" \
         -f Dockerfile .

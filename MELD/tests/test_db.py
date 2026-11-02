@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 try:
     import test_support  # noqa: F401
@@ -12,6 +13,18 @@ except ModuleNotFoundError:
 
 
 class DatabaseConfigurationTest(unittest.TestCase):
+    def test_health_check_executes_query_and_releases_connection(self):
+        from InternalDataLoader import db
+
+        with patch.object(db.engine, "connect") as connect:
+            connection = connect.return_value.__enter__.return_value
+            connection.execute.return_value.scalar.return_value = 1
+
+            self.assertTrue(db.check_connection())
+
+        self.assertEqual(str(connection.execute.call_args.args[0]), "SELECT 1")
+        connect.return_value.__exit__.assert_called_once()
+
     def run_import(self, **environment):
         code = "import InternalDataLoader.db; print(InternalDataLoader.db.engine.url.render_as_string(hide_password=False))"
         env = os.environ.copy()

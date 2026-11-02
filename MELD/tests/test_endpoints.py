@@ -90,9 +90,37 @@ class EndpointStubTestCase(unittest.TestCase):
         self.assertEqual(response.get_json(), [])
 
     def test_health(self):
-        response = self.client.get("/health")
+        with patch("Server.system.check_daemon_access", return_value=True), patch(
+            "Server.system.check_connection", return_value=True
+        ):
+            response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_data(as_text=True), "OK")
+
+    def test_health_reports_dependency_failures(self):
+        for failed_dependency in ("docker", "database"):
+            for failure in (False, PermissionError("private connection details")):
+                with self.subTest(dependency=failed_dependency, failure=failure):
+                    with patch("Server.system.check_daemon_access", return_value=True) as docker_check, patch(
+                        "Server.system.check_connection", return_value=True
+                    ) as database_check:
+                        failed_check = docker_check if failed_dependency == "docker" else database_check
+                        if isinstance(failure, Exception):
+                            failed_check.side_effect = failure
+                        else:
+                            failed_check.return_value = failure
+                        response = self.client.get("/health")
+
+                    self.assertEqual(response.status_code, 503)
+                    self.assertEqual(response.get_json(), {
+                        "status": "unhealthy",
+                        "checks": {
+                            "docker": "unavailable" if failed_dependency == "docker" else "ok",
+                            "database": "unavailable" if failed_dependency == "database" else "ok",
+                        },
+                    })
+                    docker_check.assert_called_once_with()
+                    database_check.assert_called_once_with()
 
     def test_endpoint_tester_page(self):
         response = self.client.get("/")

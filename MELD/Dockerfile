@@ -1,6 +1,7 @@
 FROM python:3.14-slim
 
-LABEL org.opencontainers.image.version="0.2.1-SNAPSHOT"
+ARG IMAGE_VERSION
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}"
 LABEL org.opencontainers.image.title="MELD Orchestrator"
 LABEL org.opencontainers.image.description="The MELD (Medical Learning and Deployment) Orchestrator enables clinicians and researchers\
 to run their own trained ML models."
@@ -13,6 +14,8 @@ RUN mkdir -p /logs /contracts /schedules /app
 WORKDIR /app
 
 COPY *.py ./
+COPY VERSION ./
+RUN test -n "$IMAGE_VERSION" && test "$IMAGE_VERSION" = "$(cat VERSION)"
 COPY entrypoint.sh ./
 COPY requirements.txt ./requirements.txt
 COPY InternalDataLoader ./InternalDataLoader
