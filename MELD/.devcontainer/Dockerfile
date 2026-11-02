@@ -9,6 +9,7 @@ RUN apt-get install -y git docker-cli
 RUN rm -rf /var/lib/apt/lists/*
 
 COPY *.py ./
+COPY VERSION ./
 COPY requirements.txt ./requirements.txt
 COPY InternalDataLoader ./InternalDataLoader
 COPY ModelEnvironment ./ModelEnvironment
