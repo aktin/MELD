@@ -75,6 +75,27 @@ contract_body = api.schema_model(
         "description": "YAML-encoded MELD contract.",
     },
 )
+contracts_response_model = api.model(
+    "ContractsResponse",
+    {
+        "total": fields.Integer(description="Number of contracts returned.", required=True),
+        "contracts": fields.List(
+            fields.Nested(
+                api.model(
+                    "ContractSummary",
+                    {
+                        "id": fields.String(description="Contract identifier."),
+                        "status": fields.String(description="Image installation status."),
+                        "progress": fields.Float(
+                            description="Installation progress; present only while installing.",
+                        ),
+                    },
+                )
+            ),
+            required=True,
+        ),
+    },
+)
 execution_status_model = api.model(
     "ExecutionStatus",
     {
@@ -104,6 +125,13 @@ execution_model = api.model(
     {
         "execution_id": fields.String(description="Execution identifier."),
         "status": fields.Nested(execution_status_model),
+    },
+)
+executions_response_model = api.model(
+    "ExecutionsResponse",
+    {
+        "total": fields.Integer(description="Number of executions returned.", required=True),
+        "executions": fields.List(fields.Nested(execution_model), required=True),
     },
 )
 

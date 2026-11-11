@@ -87,7 +87,19 @@ class EndpointStubTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/json")
-        self.assertEqual(response.get_json(), [])
+        self.assertEqual(response.get_json(), {"total": 0, "contracts": []})
+
+    def test_list_contracts_includes_total(self):
+        contracts = [
+            {"id": "contract-1", "status": "ready"},
+            {"id": "contract-2", "status": "installing", "progress": 25},
+        ]
+        with patch.object(self.service, "get_contracts_info", return_value=contracts):
+            response = self.client.get("/contracts")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/json")
+        self.assertEqual(response.get_json(), {"total": 2, "contracts": contracts})
 
     def test_health(self):
         with patch("Server.system.check_daemon_access", return_value=True), patch(
@@ -566,7 +578,10 @@ class EndpointStubTestCase(unittest.TestCase):
 
         self.assertEqual(
             response.get_json(),
-            [{"id": contract.id, "status": "installing", "progress": 25}],
+            {
+                "total": 1,
+                "contracts": [{"id": contract.id, "status": "installing", "progress": 25}],
+            },
         )
 
     def test_pull_retries_and_resumes_after_error(self):
@@ -633,6 +648,26 @@ class EndpointStubTestCase(unittest.TestCase):
             response.get_json()["error"]["code"],
             "EXECUTION_RESOURCE_NOT_FOUND",
         )
+
+    def test_list_executions_includes_total(self):
+        entries = [
+            {"execution_id": "execution-2", "status": {"status": "RUNNING"}},
+            {"execution_id": "execution-1", "status": {"status": "SUCCESS"}},
+        ]
+        for executions in ([], entries):
+            with self.subTest(executions=executions):
+                with patch.object(
+                    self.execution_service, "get_executions", return_value=executions
+                ) as get_executions:
+                    response = self.client.get("/contracts/contract-id/executions")
+
+                get_executions.assert_called_once_with("contract-id")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, "application/json")
+                self.assertEqual(
+                    response.get_json(),
+                    {"total": len(executions), "executions": executions},
+                )
 
     def test_start_execution(self):
         with patch.object(
@@ -873,6 +908,26 @@ class EndpointStubTestCase(unittest.TestCase):
         )
         responses = paths["/contracts"]["post"]["responses"]
         self.assertIn("202", responses)
+
+    def test_swagger_list_response_schemas(self):
+        schema = self.client.get("/swagger.json").get_json()
+        for path, model_name, collection, item_model in (
+            ("/contracts", "ContractsResponse", "contracts", "ContractSummary"),
+            ("/contracts/{contractId}/executions", "ExecutionsResponse", "executions", "Execution"),
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    schema["paths"][path]["get"]["responses"]["200"]["schema"],
+                    {"$ref": f"#/definitions/{model_name}"},
+                )
+                model = schema["definitions"][model_name]
+                self.assertEqual(model["type"], "object")
+                self.assertEqual(set(model["required"]), {"total", collection})
+                self.assertEqual(model["properties"]["total"]["type"], "integer")
+                self.assertEqual(
+                    model["properties"][collection],
+                    {"type": "array", "items": {"$ref": f"#/definitions/{item_model}"}},
+                )
 
     def test_track_and_read_pull_progress(self):
         with tempfile.TemporaryDirectory() as contract_directory:

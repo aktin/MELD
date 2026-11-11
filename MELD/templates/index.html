@@ -292,9 +292,9 @@
           setResponse(result, body);
           return;
         }
-        const executions = JSON.parse(body);
+        const {total, executions} = JSON.parse(body);
         renderExecutions(executions);
-        setResponse(result, `${executions.length} execution${executions.length === 1 ? '' : 's'} listed.`);
+        setResponse(result, `${total} execution${total === 1 ? '' : 's'} listed.`);
         startPolling();
       } catch (error) {
         responseView.textContent = `Request failed: ${error}`;

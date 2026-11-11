@@ -12,6 +12,7 @@ from ModelManager.contract_service import ContractService
 from .api import (
     contract_body,
     contracts as contracts_namespace,
+    contracts_response_model,
     error_model,
     error_response,
 )
@@ -71,13 +72,14 @@ def _supported_media_type() -> bool:
 
 @contracts_namespace.route("", strict_slashes=False)
 class ContractsResource(Resource):
-    @contracts_namespace.response(200, "List of contracts")
+    @contracts_namespace.response(200, "Contract count and list", contracts_response_model)
     def get(self):
         try:
             contracts = _contract_service().get_contracts_info()
+            resp = {"total": len(contracts), "contracts": contracts}
         except (OSError, TypeError, ValueError, KeyError, ValidationError, yaml.YAMLError) as error:
             return _storage_error(error)
-        return Response(json.dumps(contracts), status=200, mimetype="application/json")
+        return Response(json.dumps(resp), status=200, mimetype="application/json")
 
     @contracts_namespace.doc(
         description="Create a contract and pull its referenced image asynchronously.",

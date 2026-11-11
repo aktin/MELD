@@ -1,4 +1,5 @@
 """Execution endpoints."""
+import json
 
 from flask import current_app, Response, url_for, send_file
 from flask_restx import Resource
@@ -8,7 +9,7 @@ import yaml
 from ModelEnvironment import ExecutionService, ExecutionStatus
 from .api import (
     error_model,
-    execution_model,
+    executions_response_model,
     execution_status_model,
     error_response,
     executions as executions_namespace,
@@ -64,12 +65,14 @@ FINAL_EXECUTION_STATES = {
 @executions_namespace.doc(params={"contractId": "Contract identifier"})
 class ExecutionsResource(Resource):
     @executions_namespace.doc(description="List executions for a contract.")
-    @executions_namespace.response(200, "List of executions", [execution_model])
+    @executions_namespace.response(200, "Execution count and list", executions_response_model)
     @executions_namespace.response(404, "Contract does not exist", error_model)
     @executions_namespace.response(500, "Could not retrieve executions", error_model)
     def get(self, contractId):
         try:
-            return list(_execution_service().get_executions(contractId))
+            executions = _execution_service().get_executions(contractId)
+            resp = {"total": len(executions), "executions": executions}
+            return Response(json.dumps(resp), status=200, mimetype="application/json")
         except FileNotFoundError as error:
             return _not_found(error)
         except (OSError, TypeError, ValueError, ValidationError, yaml.YAMLError) as error:
