@@ -25,8 +25,7 @@ def _client():
 
 
 def check_daemon_access() -> bool:
-    with docker.from_env(timeout=5) as health_client:
-        return health_client.ping()
+    return _client().ping()
 
 
 def stream_container_logs(container: Container, job_context: ExecutionContext) -> None:
