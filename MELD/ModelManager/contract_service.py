@@ -8,12 +8,12 @@ import os
 import shutil
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
+from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 import yaml
 from apscheduler.jobstores.base import JobLookupError
-from six import StringIO
 
 from utils.config import CONTRACTS_DIR
 
