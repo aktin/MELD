@@ -107,7 +107,6 @@ class ContractModelsTest(unittest.TestCase):
         contract = Contract.from_dict(contract_data)
 
         self.assertEqual(contract.id, "example-contract-1.0.0")
-        self.assertEqual(contract.assign_id(force=True), "example-contract-1.0.0")
         self.assertEqual(contract.contract.id, contract.id)
 
     def test_contracts_are_equal_when_name_and_version_match(self):

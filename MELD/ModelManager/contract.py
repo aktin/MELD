@@ -109,9 +109,6 @@ class Contract(MeldInferenceRuntimeContract):
         self.contract.id = value
         return value
 
-    def assign_id(self, force: bool = False) -> str:
-        return self.id
-
     def to_dict(self) -> dict[str, Any]:
         result = _to_dict(self)
         result.pop("_extra", None)

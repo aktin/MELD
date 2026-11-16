@@ -223,12 +223,6 @@ class Contract(SchemaModel):
             self.contract.id = str(uuid.uuid4())
         return self.contract.id
 
-    def assign_id(self, force: bool = False) -> str:
-        """Assign and return a server-generated identifier."""
-        if force or self.contract.id is None:
-            self.contract.id = str(uuid.uuid4())
-        return self.contract.id
-
     def canonical_content(self) -> str:
         """Return contract content in a stable representation, excluding its ID."""
         identity = self.to_dict()

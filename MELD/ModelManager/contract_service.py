@@ -123,8 +123,6 @@ class ContractService:
                     self._start_image_pull(existing_contract)
                     return False
 
-                contract.assign_id(force=True)
-
                 image_available = self._image_available(image_ref)
                 self._store_contract(contract)
                 created = True
