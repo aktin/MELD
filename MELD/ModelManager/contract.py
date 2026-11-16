@@ -105,7 +105,7 @@ class Contract(MeldInferenceRuntimeContract):
 
     @property
     def id(self) -> str:
-        value = f"{self.contract.name}-{self.contract.version}"
+        value = f"{self.contract.name}_{self.contract.version}"
         self.contract.id = value
         return value
 

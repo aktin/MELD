@@ -83,12 +83,14 @@ class ContractServiceTest(unittest.TestCase):
 
     def test_create_and_retrieve_contract_persists_yaml_and_status(self):
         contract = self.contract()
+        contract.contract.id = "provided"
         with tempfile.TemporaryDirectory() as directory, patch.dict(
             "os.environ", {"MELD_CONTRACT_DIRECTORY": directory}
         ), patch.object(self.service, "_image_available", return_value=True):
             self.assertTrue(self.service.register_contract(contract))
             self.assertEqual(self.service._read_progress(contract.id)["status"], "ready")
             loaded = self.service.get_contract(contract.id)
+            self.assertEqual(loaded.contract.id, "example-contract_1.0.0")
             info = self.service.get_contract_info(contract.id)
             contracts_info = self.service.get_contracts_info()
 
