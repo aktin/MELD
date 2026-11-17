@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 try:
     import test_support  # noqa: F401
 except ModuleNotFoundError:
-    from MELD.tests import test_support  # noqa: F401
+    from src.tests import test_support  # noqa: F401
 from apscheduler.jobstores.base import JobLookupError
 
 from ExecutionScheduler import SchedulerService

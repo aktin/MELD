@@ -9,7 +9,7 @@ from unittest.mock import patch
 try:
     import test_support  # noqa: F401
 except ModuleNotFoundError:
-    from MELD.tests import test_support  # noqa: F401
+    from src.tests import test_support  # noqa: F401
 
 
 class DatabaseConfigurationTest(unittest.TestCase):

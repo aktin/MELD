@@ -6,7 +6,7 @@ import pandas as pd
 try:
     import test_support  # noqa: F401
 except ModuleNotFoundError:
-    from MELD.tests import test_support  # noqa: F401
+    from src.tests import test_support  # noqa: F401
 
 
 DATABASE_URL = os.environ.get("MELD_TEST_DATABASE_URL")
