@@ -2,11 +2,11 @@ export DB_HOST=localhost
 export DB_PORT=5433
 export DB_USER=i2b2crcdata
 export DB_SCHEMA=i2b2
-export DB_PASSWORD_FILE=../MELD/.devcontainer/db_password.txt
-export MELD_LOG_DIR=../MELD/logs
-export MELD_ROOT_DIR=../MELD
+export DB_PASSWORD_FILE=../src/.devcontainer/db_password.txt
+export MELD_LOG_DIR=../src/logs
+export MELD_ROOT_DIR=../src
 
-cd ../MELD
+cd ../src
 
 ./.venv/bin/python main.py &
 server_pid=$!

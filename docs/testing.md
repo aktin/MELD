@@ -11,16 +11,16 @@ formats are part of the behavior being tested.
 From the repository root, run:
 
 ```bash
-./.venv/bin/python -m unittest discover -s MELD/tests -p 'test*.py' -v
+./.venv/bin/python -m unittest discover -s src/tests -p 'test*.py' -v
 ```
 
-The equivalent command from inside `MELD` is:
+The equivalent command from inside `src` is:
 
 ```bash
 ../.venv/bin/python -m unittest discover -s tests -p 'test*.py' -v
 ```
 
-`MELD/tests/test_support.py` creates temporary log and database-password
+`src/tests/test_support.py` creates temporary log and database-password
 resources before importing application modules. It also supplies harmless
 database connection settings. Each test patches contract paths, execution
 paths, Docker clients, or database connections as needed, so the commands do
@@ -28,8 +28,8 @@ not connect to external services.
 
 ## Contract schema and generated models
 
-`MELD/resources/contract.schema.json` is the source of truth for contract
-validation. The Python files under `MELD/ModelManager/generated/` are generated
+`src/resources/contract.schema.json` is the source of truth for contract
+validation. The Python files under `src/ModelManager/generated/` are generated
 dataclasses that describe the schema's fields and nesting; constructing one of
 these dataclasses does not enforce JSON Schema rules.
 

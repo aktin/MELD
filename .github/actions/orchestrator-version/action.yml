@@ -54,19 +54,19 @@ runs:
         echo "complete=false" >> "$GITHUB_OUTPUT"
 
         if [[ "$(git rev-parse HEAD)" == "$tag_commit" ]]; then
-          printf '%s\n' "$version" > MELD/VERSION
-          git add -- MELD/VERSION
+          printf '%s\n' "$version" > src/VERSION
+          git add -- src/VERSION
           if ! git diff --cached --quiet; then
             git commit -m "$release_message"
           fi
           git push origin HEAD:refs/heads/main
         elif [[ "$(git rev-parse HEAD^)" == "$tag_commit" && "$(git log -1 --format=%B)" == "$release_message" ]]; then
-          test "$(cat MELD/VERSION)" = "$version"
+          test "$(cat src/VERSION)" = "$version"
         elif [[ "$(git log -1 --format=%B)" == "$snapshot_message" ]] && {
           [[ "$(git rev-parse HEAD^)" == "$tag_commit" ]] ||
           [[ "$(git rev-parse HEAD^^)" == "$tag_commit" && "$(git log -1 --format=%B HEAD^)" == "$release_message" ]];
         }; then
-          test "$(cat MELD/VERSION)" = "$snapshot_version"
+          test "$(cat src/VERSION)" = "$snapshot_version"
           echo "complete=true" >> "$GITHUB_OUTPUT"
           echo "Release $version already completed."
         else
@@ -83,7 +83,7 @@ runs:
         set -euo pipefail
         tag_commit=$(git rev-parse --verify "refs/tags/$VERSION^{commit}")
         snapshot_version="${VERSION%-SNAPSHOT}-SNAPSHOT"
-        printf '%s\n' "$snapshot_version" > MELD/VERSION
-        git add -- MELD/VERSION
+        printf '%s\n' "$snapshot_version" > src/VERSION
+        git add -- src/VERSION
         git commit -m "chore: restore $snapshot_version (tag $tag_commit)"
         git push origin HEAD:refs/heads/main

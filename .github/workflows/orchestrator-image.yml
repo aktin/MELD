@@ -63,8 +63,8 @@ jobs:
         if: steps.version.outputs.complete != 'true'
         uses: docker/build-push-action@v6
         with:
-          context: ./MELD
-          file: ./MELD/Dockerfile
+          context: ./src
+          file: ./src/Dockerfile
           push: true
           tags: ${{ steps.image.outputs.tag }}
           build-args: |

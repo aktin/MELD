@@ -1,7 +1,7 @@
 # Execution state lifecycle
 
 This document describes the execution lifecycle represented by
-`MELD/ModelEnvironment/execution_context.py`. It combines the enum with the
+`src/ModelEnvironment/execution_context.py`. It combines the enum with the
 status writers in the execution service, manager, inference runner, and Docker
 runtime helpers.
 

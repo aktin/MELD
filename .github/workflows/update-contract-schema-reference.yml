@@ -37,8 +37,8 @@ jobs:
         run: |
           set -eu
 
-          git add docs/generated/contract_schema_reference.md MELD/ModelManager/generated
-          if git diff --cached --quiet -- docs/generated/contract_schema_reference.md MELD/ModelManager/generated; then
+          git add docs/generated/contract_schema_reference.md src/ModelManager/generated
+          if git diff --cached --quiet -- docs/generated/contract_schema_reference.md src/ModelManager/generated; then
             exit 0
           fi
 

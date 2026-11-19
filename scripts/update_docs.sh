@@ -3,10 +3,10 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SCHEMA_PATH="$SCRIPT_DIR/../MELD/resources/contract.schema.json"
+SCHEMA_PATH="$SCRIPT_DIR/../src/resources/contract.schema.json"
 DOCS_BASE_PATH="$SCRIPT_DIR/../docs"
 SCHEMA_DOC_PATH="$DOCS_BASE_PATH/generated/contract_schema_reference.md"
-MODEL_OUTPUT_PATH="$SCRIPT_DIR/../MELD/ModelManager/generated"
+MODEL_OUTPUT_PATH="$SCRIPT_DIR/../src/ModelManager/generated"
 MODEL_TEMP_ROOT=$(mktemp -d)
 MODEL_TEMP_PATH="$MODEL_TEMP_ROOT/generated"
 
