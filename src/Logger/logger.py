@@ -5,8 +5,6 @@ from pathlib import Path
 
 from utils.config import LOG_DIR
 
-from utils.config import LOG_DIR
-
 
 class NoTracebackFormatter(logging.Formatter):
     """
