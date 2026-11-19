@@ -3,7 +3,7 @@ name: Update contract schema reference
 on:
   push:
     paths:
-      - "MELD/resources/contract.schema.json"
+      - "src/resources/contract.schema.json"
   workflow_dispatch:
 
 permissions:

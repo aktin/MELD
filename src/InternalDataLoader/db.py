@@ -8,8 +8,8 @@ logger = logging.getLogger("meld")
 
 host = os.getenv("DB_HOST", default="localhost")
 port = os.getenv("DB_PORT", default="5432")
-user = os.getenv("DB_USER", default="i2b2crcdata")
-schema = os.getenv("DB_SCHEMA", default="i2b2")
+user = os.getenv("DB_USER", default="postgres")
+db_name = os.getenv("DB_NAME", default="i2b2")
 password_file = os.getenv("DB_PASSWORD_FILE")
 
 try:
@@ -22,7 +22,7 @@ except TypeError:
     logger.error(f"DB_PASSWORD_FILE is not set")
     exit(1)
 
-engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{schema}")
+engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}")
 
 
 def check_connection() -> bool:

@@ -6,11 +6,11 @@ MELD (Machine Learning Execution and Deployment) is a Python orchestrator for ru
 
 ## Repository layout
 
-- `MELD/` contains the orchestrator application.
-- `MELD/ModelEnvironment/` contains execution contexts, background execution services, inference runtime integration, and Docker operations.
-- `MELD/ModelManager/` contains contract models, contract persistence, configuration loading, and inference orchestration.
-- `MELD/Server/` contains the Flask API and HTTP endpoints.
-- `MELD/tests/` contains the unit test suite.
+- `src/` contains the orchestrator application.
+- `src/ModelEnvironment/` contains execution contexts, background execution services, inference runtime integration, and Docker operations.
+- `src/ModelManager/` contains contract models, contract persistence, configuration loading, and inference orchestration.
+- `src/Server/` contains the Flask API and HTTP endpoints.
+- `src/tests/` contains the unit test suite.
 - `examples/` contains example inference runtimes.
 - `docs/` contains project and testing documentation.
 - `scripts/` contains development and integration helpers.
@@ -25,7 +25,7 @@ Run the unit test suite from the repository root:
 
 The unit tests mock Docker, PostgreSQL, registries, and live servers. They should not require external services.
 
-For container-based development, use the configuration under `MELD/.devcontainer/`. The application dependencies are listed in `MELD/requirements.txt`.
+For container-based development, use the configuration under `src`. The application dependencies are listed in `src`.
 
 ## Implementation guidance
 
@@ -33,7 +33,7 @@ For container-based development, use the configuration under `MELD/.devcontainer
 - Preserve the public API, contract file layout, and existing filesystem paths unless the task explicitly changes them.
 - Treat contract and execution directories as persistent application data. Avoid changing their names or structure without updating all readers and writers.
 - Execution state is persisted in `status/status.json`; logs are stored under the execution's `logs/` directory; completed results are stored as `output/summarized_execution.zip`.
-- `ExecutionService` submits inference work to its single-worker executor, tracks the active execution, supports cancellation, lists persisted executions, reads logs, streams log lines, and returns result archives. Changes to this behavior should update the corresponding tests in `MELD/tests/test_execution_service.py`.
+- `ExecutionService` submits inference work to its single-worker executor, tracks the active execution, supports cancellation, lists persisted executions, reads logs, streams log lines, and returns result archives. Changes to this behavior should update the corresponding tests in `src`.
 - Keep Docker and database interactions behind the existing runtime and data-loader boundaries so unit tests remain isolated.
 - Do not add dependencies, tools, services, or broad refactors unless the task requires them.
 
