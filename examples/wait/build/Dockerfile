@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED=1
 
 RUN mkdir -p /input /output
 
-COPY inference/ /inference/
+COPY .context/inference/ /inference/
 
 WORKDIR /inference
 
